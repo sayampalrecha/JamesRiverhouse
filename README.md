@@ -1,4 +1,5 @@
 # JamesRiverhouse
+DATS_6101
 
 Predicting and Analyzing U.S. Flight Delays: Identifying Key Factors and Improving Forecast Accuracy
 
@@ -18,7 +19,7 @@ This analysis will offer valuable insights to airlines, passengers, and policyma
 
 SMART questions – 
 
-1.	"Can we predict the total delay time for flights in the U.S. with the highest accuracy using historical data (2017–2022), based on factors such as airline efficiency, airport traffic, weather conditions, and National Aviation System, to provide valuable insights for airlines, airports, and regulatory bodies to optimize scheduling and reduce delays for future flight operations?"
+1.	"Can we predict the total delay time for flights in the U.S. with the highest accuracy using historical data (2017–2022), based on factors such as airline efficiency, airport traffic, weather conditions, and National Aviation System, to provide valuable insights for airlines, airports, and regulatory bodies to optimize scheduling and reduce delays for future flight operations?" 
 2.	"How can we leverage real-time data and machine learning to accurately predict flight delays in the U.S. based on chronicled data, considering factors like weather conditions, air traffic, intervene of National Aviation System, and airline operations, to enhance scheduling and minimize disruptions across the aviation network?"
 
 
