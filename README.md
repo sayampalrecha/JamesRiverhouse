@@ -23,4 +23,6 @@ SMART questions –
 
 2.	"How can we leverage real-time data and machine learning to accurately predict flight delays in the U.S. based on chronicled data, considering factors like weather conditions, air traffic, intervene of National Aviation System, and airline operations, to enhance scheduling and minimize disruptions across the aviation network?"
 
+3. What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns correlate with specific routes and time of day
+
 Kaggle Dataset: "https://www.kaggle.com/datasets/jawadkhattak/us-flight-delay-from-january-2017-july-2022"
