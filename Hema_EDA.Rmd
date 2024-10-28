@@ -140,7 +140,12 @@ qqnorm(flight_b$Arrival_Delay_min, ylab = 'Total Delay' , main = "Total Delay");
 ```
 
 
-Since these distributions are not normal, Parametric statistical studies cannot be performed. And Weather and security reasons seems to be minimal in the dataset. 
+weather and security delays are rare in this dataset and when they occur, they're likely significant outliers.
+
+None of the delay types follow a normal distribution.
+
+Since these distributions are not normal, Parametric statistical studies cannot be performed. 
+
 
 ## 4. SMART Question and Analysis:
 
