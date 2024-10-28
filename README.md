@@ -27,4 +27,4 @@ SMART questions –
 
 4. For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies
 
-Kaggle Dataset: "[https://www.kaggle.com/datasets/jawadkhattak/us-flight-delay-from-january-2017-july-2022](https://www.kaggle.com/datasets/undersc0re/flight-delay-and-causes/data)"
+Kaggle Dataset: https://www.kaggle.com/datasets/undersc0re/flight-delay-and-causes/data
