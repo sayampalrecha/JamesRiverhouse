@@ -1,7 +1,7 @@
 ---
 title: "Predicting and Analyzing U.S. Flight Delays: Identifying Key Factors and Improving Forecast Accuracy"
 Group: "JamesRiverhouse"
-Members: "Hema Puchakayala, Rasika Nilatkar, Sayyam Palrecha, Hussain Nathani"
+Members: "Hema Puchakayala"
 #date: "today"
 date: "`r Sys.Date()`"
 output:
@@ -31,7 +31,7 @@ options(scientific=T, digits = 3)
 
 # EDA
 
-# Loading the Data
+## 1. Loading the Data
 ```{r}
 flight <- data.frame(read.csv("Flight_delay.csv"))
 ```
@@ -43,13 +43,35 @@ Dataset loaded..
 column_names <- c('Day_of_Week','Date','Departure_Time','Arrival_Time','Scheduled_Arrival_Time',  'Unique_Carrier_Code','Carrier_name', 'Flight_Number','Tail_Number', 'Actual_Elapsed_Time_min','Estimated_Elapsed_Time_min','Air_Time_min', 'Arrival_Delay_min', 'Departure_Delay_min','Origin', 'Origin_Airport','Destination','Destination_Airport', 'Distance_mi','Taxi_In_min','Taxi_Out_min', 'Cancelled', 'CancellationCode','Diverted','Carrier_Delay_min','Weather_Delay_min', 'NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min')
 
 colnames(flight) <- column_names
-```
-```{r}
-nrow(flight)
-ncol(flight)
+unique_carriers <- data.frame(unique(flight[,7]))
 ```
 
-# Outliers
+## 2. Description:
+
+Number of rows before Data pre-processing: `r nrow(flight)`
+
+Unique Airlines:
+`r knitr::kable(unique_carriers)`
+
+
+Reasons for the delay:
+
+1. CarrierDelay → Flight delay due to carrier(e.g. maintenance or crew problems, aircraft cleaning, fueling, etc), 0 = No, yes = (in minutes)
+
+2. WeatherDelay → Flight delay due to weather, 0 = No, yes = (in minutes)
+
+3. NASDelay → Flight delay by NSA(National Aviation System), 0 = No, yes = (in minutes)
+
+4. SecurityDelay → Flight delay by security reason, 0 = No, yes = (in minutes)
+
+5. LateAircraftDelay → Flight delay by Aircraft reason, 0 = No, yes = (in minutes)
+
+
+## 3. Data Preprocessing:
+
+### 3.1. Outliers:
+
+Removing outliers and null rows with a threshold of 1.5
 
 ```{r}
 remove_outliers <- function(df, columns) {
@@ -59,36 +81,30 @@ remove_outliers <- function(df, columns) {
         # Get the specified column
         x <- df_clean[[column_name]]
         
-        # Skip if all values are the same (like all zeros)
-        if(var(x, na.rm = TRUE) == 0) {
-            cat("\nSkipping", column_name, "as all values are the same\n")
-            next
-        }
-        
-        # Remove NA values first
+        # Removing NA values
         valid_rows <- !is.na(x)
         x_clean <- x[valid_rows]
         
-        # Calculate Q1, Q3, and IQR
+        # Calculating Q1, Q3, and IQR
         Q1 <- quantile(x_clean, 0.25)
         Q3 <- quantile(x_clean, 0.75)
         IQR <- Q3 - Q1
         
-        # Define bounds
+        # bounds for outlier removal
         lower_bound <- Q1 - 1.5 * IQR
         upper_bound <- Q3 + 1.5 * IQR
         
-        # Print summary before removal
+        # summary before removal
         cat("\nProcessing", column_name, ":\n")
         cat("Original rows:", sum(valid_rows), "\n")
         cat("Q1:", Q1, "Q3:", Q3, "IQR:", IQR, "\n")
         cat("Lower bound:", lower_bound, "Upper bound:", upper_bound, "\n")
         
-        # Keep only non-outlier rows
+        # Deleting outlier rows
         keep_rows <- x >= lower_bound & x <= upper_bound & valid_rows
         df_clean <- df_clean[keep_rows, ]
         
-        # Print summary after removal
+        # summary after removal
         cat("Rows after removal:", nrow(df_clean), "\n")
         cat("Outliers removed:", sum(valid_rows) - nrow(df_clean), "\n\n")
     }
@@ -97,54 +113,69 @@ remove_outliers <- function(df, columns) {
 }
 ```
 
-```{r}
-flight <- na.omit(flight)
-nrow(flight)
-ncol(flight)
-```
+
+
 ```{r}
 library(ggplot2)
 flight_b <- remove_outliers(flight,c('Arrival_Delay_min','Carrier_Delay_min','Weather_Delay_min','NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min'))
 ```
 
-```{r}
-#| fig-width: 20
-#| fig-height: 5
-#flight_b <- remove_outliers(flight_b,'Carrier_Delay_min')
-#flight_b <- remove_outliers(flight_b,'Weather_Delay_min')
-#flight_b <- remove_outliers(flight_b,'NAS_Delay_min')
-#flight_b <- remove_outliers(flight_b,'Security_Delay_min')
-#flight_b <- remove_outliers(flight_b,'Late_Aircraft_Delay_min')
 
-#flight_b <- outlierKD2(flight$Arrival_Delay_min,TRUE,FALSE,FALSE,FALSE)
-#flight_b <- outlierKD2(flight_b,Carrier_Delay_min,TRUE,FALSE,FALSE,FALSE)
-#flight_b <- outlierKD2(flight_b,Weather_Delay_min,TRUE,FALSE,FALSE,FALSE)
-#flight_b <- outlierKD2(flight_b,NAS_Delay_min,TRUE,FALSE,FALSE,FALSE)
-#flight_b <- outlierKD2(flight_b,Security_Delay_min,TRUE,FALSE,FALSE,FALSE)
-#flight_b <- outlierKD2(flight_b,Late_Aircraft_Delay_min,TRUE,FALSE,FALSE,FALSE)
-ggplot(flight_b,aes(Carrier_name,Arrival_Delay_min))+geom_boxplot(aes(fill = Carrier_name ))+labs(title = "Box plots of Airlines flight delay distribution") + theme(plot.title = element_text(size = 25,hjust =0.5))
-```
-```{r}
-flight_5 <- flight_b[flight_b$Carrier_name %in% c('JetBlue Airways','United Air Lines Inc.','Skywest Airlines Inc.','American Airlines Inc.','American Eagle Airlines Inc.'),]
-```
+Number of rows after nulls and Outlier removal: `r nrow(flight_b)`
 
-```{r}
-nrow(flight_5)
-```
+### 3.2. Normality checks:
+
+
 ```{r}
 #| fig-width: 20
 #| fig-height: 15
 par(mfrow = c(3, 2))
-qqnorm(flight_5$Carrier_Delay_min, ylab = 'Carrier_Delay_min', main = "Carrier_Delay_min"); qqline(flight_5$Carrier_Delay_min,col=2)
-qqnorm(flight_5$Weather_Delay_min, ylab = 'Weather_Delay_min', main = "Weather_Delay_min"); qqline(flight_5$Weather_Delay_min,col=2)
-qqnorm(flight_5$NAS_Delay_min, ylab = 'NAS_Delay_min', main = "NAS_Delay_min"); qqline(flight_5$NAS_Delay_min,col=2)
-qqnorm(flight_5$Security_Delay_min, ylab = 'Security_Delay_min', main = "Security_Delay_min"); qqline(flight_5$Security_Delay_min,col=2)
-qqnorm(flight_5$Late_Aircraft_Delay_min, ylab = 'Late_Aircraft_Delay_min', main = "Late_Aircraft_Delay_min"); qqline(flight_5$Late_Aircraft_Delay_min,col=2)
-qqnorm(flight_5$Arrival_Delay_min, ylab = 'Arrival_Delay_min', main = "Arrival_Delay_min"); qqline(flight_5$Arrival_Delay_min,col=2)
+qqnorm(flight_b$Carrier_Delay_min, ylab = 'Flight delay due to carrier', main = "Flight delay due to carrier"); qqline(flight_b$Carrier_Delay_min,col=2)
+qqnorm(flight_b$Weather_Delay_min, ylab = 'Flight delay due to weather', main = "Flight delay due to weather"); qqline(flight_b$Weather_Delay_min,col=2)
+qqnorm(flight_b$NAS_Delay_min, ylab = 'NAS_Delay_min', main = "Flight delay by NSA(National Aviation System)"); qqline(flight_b$NAS_Delay_min,col=2)
+qqnorm(flight_b$Security_Delay_min, ylab = 'Security_Delay_min', main = "Flight delay by security reason"); qqline(flight_b$Security_Delay_min,col=2)
+qqnorm(flight_b$Late_Aircraft_Delay_min, ylab = 'Flight delay by Aircraft reason', main = "Flight delay by Aircraft reason"); qqline(flight_b$Late_Aircraft_Delay_min,col=2)
+qqnorm(flight_b$Arrival_Delay_min, ylab = 'Total Delay' , main = "Total Delay"); qqline(flight_b$Arrival_Delay_min,col=2)
 
 ```
-since these distributions are not normal, Parametric statistical studies cannot be performed.
 
+
+Since these distributions are not normal, Parametric statistical studies cannot be performed. And Weather and security reasons seems to be minimal in the dataset. 
+
+## 4. SMART Question and Analysis:
+
+“For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies”
+
+### 4.1. Identifying top 5 airlines:
+
+```{r}
+#| fig-width: 20
+#| fig-height: 5
+ggplot(flight_b,aes(Carrier_name,Arrival_Delay_min))+geom_boxplot(aes(fill = Carrier_name ))+labs(title = "Box plots of Airlines flight delay distribution") + theme(plot.title = element_text(size = 25,hjust =0.5)) + stat_summary(aes(y = Arrival_Delay_min , label = round(..y.., 2)), 
+                 fun.y = median, geom = "text") 
+
+```
+
+
+
+From the box-plots above, higher median lines are found for:
+
+JetBlue Airways
+
+United Air Lines Inc.
+
+American Eagle Airlines Inc.
+
+American Airlines Inc.
+
+US Airways Inc.
+
+
+```{r}
+flight_5 <- flight_b[flight_b$Carrier_name %in% c('JetBlue Airways','United Air Lines Inc.','US Airways Inc.','American Airlines Inc.','American Eagle Airlines Inc.'),]
+```
+
+### 4.2. Identifying major reasons for these 5 airlines:
 
 ```{r}
 library(ggplot2)
@@ -197,9 +228,6 @@ ggplot(delay_long, aes(x = Carrier_name, y = value, fill = variable)) +
   ) +  
   scale_y_continuous(labels = scales::percent)
 
-```
-```{r}
-
 flight_5$MonthYear <- format(as.Date(flight_5$Date, "%d-%m-%Y"), "%b-%Y")
 
 # Calculate monthly averages for each airline and delay type
@@ -217,6 +245,8 @@ monthly_delays <- aggregate(
 )
 ```
 
+
+
 ```{r}
 delay_long <- melt(monthly_delays, 
                   id.vars = c("MonthYear", "Carrier_name"),
@@ -225,49 +255,63 @@ delay_long <- melt(monthly_delays,
 ```
 
 
-#```{r}
-##| fig-width: 10
-##| fig-height: 20
-##| 
-#ggplot(delay_long, aes(x = MonthYear, y = Minutes, color = Delay_Type, group = Delay_Type)) +
-#  geom_line(linewidth = 1) +
-#  geom_point(size = 2) +
-#  facet_wrap(~Carrier_name, ncol = 1, scales = "free_y") +
-#  theme_minimal() +
-#  labs(
-#    title = "Monthly Trends in Airline Delays by Type",
-#    x = "MonthYear",
-#    y = "Average Delay Minutes",
-#    color = "Delay Type"
-#  ) +
-#  theme(
-#    axis.text.x = element_text(angle = 45, hjust = 1),
-#    plot.title = element_text(hjust = 0.5),
-#    legend.position = "right",
-#    strip.text = element_text(face = "bold")
-#  ) +
-# scale_color_brewer(palette="Set1")
-#```
+Analysis from above graph:
+
+1. Late Aircraft Delay dominates across all airlines, accounting for the largest proportion of delays, highest being in JetBlue Airways (64.0%).
+
+2. Followed by Carrier Delay and NAS Delay, all three combined causes 100% delays.
+
+3. Weather and Security delays appear minimal or non-existent
+
+4. Late aircraft delays being dominant suggests a huge impact in airline operations
+
+5. Different airlines might need different strategies based on their delay profiles, for example JetBlue might focus on late aircraft issues, while American Airlines might prioritize carrier-related delays since American Airlines has the highest percentage compared to others.
+
+
+### 4.3. Identifying major reasons for these 5 airlines:
 
 
 
 ```{r}
-ggplot(delay_long, aes(x = MonthYear, y = Minutes, color = Delay_Type, 
-                      linetype = Carrier_name, group = interaction(Carrier_name, Delay_Type))) +
+library(dplyr)
+
+delay_long <- delay_long %>%
+  mutate(
+    MonthDate = as.Date(paste0("01-", MonthYear), format = "%d-%b-%Y"),
+    MonthYear = factor(format(MonthDate, "%b-%Y"),levels = format(sort(unique(MonthDate)),"%b-%Y")))
+ggplot(delay_long, 
+       aes(x = MonthYear, 
+           y = Minutes, 
+           color = Delay_Type, 
+           group = Delay_Type)) +
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
+  facet_wrap(~Carrier_name, ncol = 2, scales = "free_y") +
   theme_minimal() +
   labs(
     title = "Monthly Delay Trends by Airline and Delay Type",
-    x = "MonthYear",
+    x = "Month-Year",
     y = "Average Delay Minutes",
-    color = "Delay Type",
-    linetype = "Airline"
+    color = "Delay Type"
   ) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(hjust = 0.5),
-    legend.position = "right"
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(size = 14, hjust = 0.5),
+    legend.position = "bottom",
+    legend.text = element_text(size = 8),
+    panel.spacing = unit(1, "lines")
   ) +
-  scale_color_brewer(palette="Set1")
+  scale_color_brewer(palette = "Set1") +
+  guides(color = guide_legend(nrow=1))
+
 ```
+
+Consistency of analysis over 6 month period:
+
+1. Late Aircraft Delays (orange line) consistently show the highest delays across all airlines
+
+2. Security Delays (purple line) consistently show the lowest delays
+
+3. Most trends remain relatively stable across the 6-month period
