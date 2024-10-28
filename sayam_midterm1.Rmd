@@ -1,0 +1,175 @@
+---
+title: "Intro to DS - Midterm"
+author: "Sayam Palrecha"
+date: "`r Sys.Date()`"
+# date: 
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r}
+library(ezids)
+knitr::opts_chunk$set(warning = F, results = "hide", message = F)
+options(scientific=T, digits = 3) 
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(tidyr)
+library(corrplot)
+library(scales)
+```
+
+# SMART Question
+What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns correlate with specific routes and time of day
+
+# Unserstanding the dataset
+```{r}
+airline_data <- read.csv('Flight_delay.csv')
+str(airline_data)
+```
+
+```{r}
+summary(airline_data)
+```
+
+```{r}
+colSums(is.na(airline_data))
+```
+## Formatting the date and month column
+```{r}
+
+airline_data$Date <- as.Date(airline_data$Date)
+airline_data$Month <- month(airline_data$Date)
+```
+# Filter summer months (June-August)
+```{r}
+summer_data <- airline_data %>%filter(Month %in% c(6, 7, 8))
+```
+## Calculate average delays by carrier
+```{r}
+
+carrier_delays <- summer_data %>%
+  group_by(UniqueCarrier) %>%
+  summarise(
+    AvgArrDelay = mean(ArrDelay, na.rm = TRUE),
+    AvgDepDelay = mean(DepDelay, na.rm = TRUE),
+    TotalDelay = AvgArrDelay + AvgDepDelay,
+    CarrierDelay = mean(CarrierDelay, na.rm = TRUE),
+    WeatherDelay = mean(WeatherDelay, na.rm = TRUE)
+  ) %>%
+  arrange(desc(TotalDelay))
+```
+# Get top 3 carriers
+```{r}
+top_3_carriers <- head(carrier_delays, 3)
+```
+## Visualization 1: Top 3 Carriers Average Delays
+```{r}
+
+ggplot(top_3_carriers, aes(x = reorder(UniqueCarrier, -TotalDelay), y = TotalDelay)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = round(TotalDelay, 2)), vjust = -0.5) +
+  theme_minimal() +
+  labs(
+    title = "Top 3 Carriers with Highest Average Delays (Summer Months)",
+    x = "Carrier",
+    y = "Average Total Delay (minutes)"
+  )
+```
+## Time of Day Analysis
+```{r}
+
+summer_data$Hour <- as.numeric(format(strptime(sprintf("%04d", summer_data$DepTime),format = "%H%M"), "%H"))
+```
+# Visualization 2: Delay Patterns by Time of Day
+```{r}
+# Visualization 2: Delay Patterns by Time of Day
+hourly_delays <- summer_data %>%
+  filter(UniqueCarrier %in% top_3_carriers$UniqueCarrier) %>%
+  group_by(UniqueCarrier, Hour) %>%
+  summarise(AvgDelay = mean(ArrDelay, na.rm = TRUE))
+
+ggplot(hourly_delays, aes(x = Hour, y = AvgDelay, color = UniqueCarrier)) +
+  geom_line() +
+  geom_smooth(se = FALSE) +
+  theme_minimal() +
+  labs(
+    title = "Delay Patterns by Time of Day",
+    x = "Hour of Day",
+    y = "Average Arrival Delay (minutes)"
+  )
+```
+## Route Analysis
+```{r}
+ 
+route_delays <- summer_data %>%
+  group_by(UniqueCarrier, Origin, Dest) %>%
+  summarise(
+    AvgDelay = mean(ArrDelay, na.rm = TRUE),
+    Flights = n()
+  ) %>%
+  filter(Flights >= 50) %>%  # Filter routes with minimum 50 flights
+  arrange(desc(AvgDelay))
+```
+# Visualization 3: Top 10 Routes with Highest Delays
+```{r}
+
+top_10_routes <- head(route_delays, 10)
+ggplot(top_10_routes, 
+       aes(x = paste(Origin, "->", Dest), y = AvgDelay, fill = UniqueCarrier)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Top 10 Routes with Highest Average Delays",
+    x = "Route",
+    y = "Average Delay (minutes)"
+  )
+```
+# Correlation Analysis
+```{r}
+
+correlation_vars <- summer_data %>%
+  select(ArrDelay, DepDelay, Distance, TaxiIn, TaxiOut)
+correlation_matrix <- cor(correlation_vars, use = "complete.obs")
+
+# Visualization 4: Correlation Heatmap
+corrplot(correlation_matrix, 
+         method = "color", 
+         type = "upper", 
+         addCoef.col = "black",
+         tl.col = "black",
+         tl.srt = 45)
+```
+# Statistical Summary
+```{r}
+
+
+summary_stats <- summer_data %>%
+  group_by(UniqueCarrier) %>%
+  filter(UniqueCarrier %in% top_3_carriers$UniqueCarrier) %>%
+  summarise(
+    Mean_Delay = mean(ArrDelay, na.rm = TRUE),
+    Median_Delay = median(ArrDelay, na.rm = TRUE),
+    SD_Delay = sd(ArrDelay, na.rm = TRUE),
+    Total_Flights = n(),
+    Delayed_Flights = sum(ArrDelay > 0, na.rm = TRUE),
+    Delay_Rate = Delayed_Flights / Total_Flights * 100
+  )
+print(summary_stats)
+```
+```{r}
+write.csv(summary_stats, "airline_delay_analysis.csv")
+```
+
