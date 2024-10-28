@@ -1,0 +1,273 @@
+---
+title: "Predicting and Analyzing U.S. Flight Delays: Identifying Key Factors and Improving Forecast Accuracy"
+Group: "JamesRiverhouse"
+Members: "Hema Puchakayala, Rasika Nilatkar, Sayyam Palrecha, Hussain Nathani"
+#date: "today"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r init, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+
+# EDA
+
+# Loading the Data
+```{r}
+flight <- data.frame(read.csv("Flight_delay.csv"))
+```
+
+
+Dataset loaded..
+
+```{r}
+column_names <- c('Day_of_Week','Date','Departure_Time','Arrival_Time','Scheduled_Arrival_Time',  'Unique_Carrier_Code','Carrier_name', 'Flight_Number','Tail_Number', 'Actual_Elapsed_Time_min','Estimated_Elapsed_Time_min','Air_Time_min', 'Arrival_Delay_min', 'Departure_Delay_min','Origin', 'Origin_Airport','Destination','Destination_Airport', 'Distance_mi','Taxi_In_min','Taxi_Out_min', 'Cancelled', 'CancellationCode','Diverted','Carrier_Delay_min','Weather_Delay_min', 'NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min')
+
+colnames(flight) <- column_names
+```
+```{r}
+nrow(flight)
+ncol(flight)
+```
+
+# Outliers
+
+```{r}
+remove_outliers <- function(df, columns) {
+    df_clean <- df
+    
+    for(column_name in columns) {
+        # Get the specified column
+        x <- df_clean[[column_name]]
+        
+        # Skip if all values are the same (like all zeros)
+        if(var(x, na.rm = TRUE) == 0) {
+            cat("\nSkipping", column_name, "as all values are the same\n")
+            next
+        }
+        
+        # Remove NA values first
+        valid_rows <- !is.na(x)
+        x_clean <- x[valid_rows]
+        
+        # Calculate Q1, Q3, and IQR
+        Q1 <- quantile(x_clean, 0.25)
+        Q3 <- quantile(x_clean, 0.75)
+        IQR <- Q3 - Q1
+        
+        # Define bounds
+        lower_bound <- Q1 - 1.5 * IQR
+        upper_bound <- Q3 + 1.5 * IQR
+        
+        # Print summary before removal
+        cat("\nProcessing", column_name, ":\n")
+        cat("Original rows:", sum(valid_rows), "\n")
+        cat("Q1:", Q1, "Q3:", Q3, "IQR:", IQR, "\n")
+        cat("Lower bound:", lower_bound, "Upper bound:", upper_bound, "\n")
+        
+        # Keep only non-outlier rows
+        keep_rows <- x >= lower_bound & x <= upper_bound & valid_rows
+        df_clean <- df_clean[keep_rows, ]
+        
+        # Print summary after removal
+        cat("Rows after removal:", nrow(df_clean), "\n")
+        cat("Outliers removed:", sum(valid_rows) - nrow(df_clean), "\n\n")
+    }
+    
+    return(df_clean)
+}
+```
+
+```{r}
+flight <- na.omit(flight)
+nrow(flight)
+ncol(flight)
+```
+```{r}
+library(ggplot2)
+flight_b <- remove_outliers(flight,c('Arrival_Delay_min','Carrier_Delay_min','Weather_Delay_min','NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min'))
+```
+
+```{r}
+#| fig-width: 20
+#| fig-height: 5
+#flight_b <- remove_outliers(flight_b,'Carrier_Delay_min')
+#flight_b <- remove_outliers(flight_b,'Weather_Delay_min')
+#flight_b <- remove_outliers(flight_b,'NAS_Delay_min')
+#flight_b <- remove_outliers(flight_b,'Security_Delay_min')
+#flight_b <- remove_outliers(flight_b,'Late_Aircraft_Delay_min')
+
+#flight_b <- outlierKD2(flight$Arrival_Delay_min,TRUE,FALSE,FALSE,FALSE)
+#flight_b <- outlierKD2(flight_b,Carrier_Delay_min,TRUE,FALSE,FALSE,FALSE)
+#flight_b <- outlierKD2(flight_b,Weather_Delay_min,TRUE,FALSE,FALSE,FALSE)
+#flight_b <- outlierKD2(flight_b,NAS_Delay_min,TRUE,FALSE,FALSE,FALSE)
+#flight_b <- outlierKD2(flight_b,Security_Delay_min,TRUE,FALSE,FALSE,FALSE)
+#flight_b <- outlierKD2(flight_b,Late_Aircraft_Delay_min,TRUE,FALSE,FALSE,FALSE)
+ggplot(flight_b,aes(Carrier_name,Arrival_Delay_min))+geom_boxplot(aes(fill = Carrier_name ))+labs(title = "Box plots of Airlines flight delay distribution") + theme(plot.title = element_text(size = 25,hjust =0.5))
+```
+```{r}
+flight_5 <- flight_b[flight_b$Carrier_name %in% c('JetBlue Airways','United Air Lines Inc.','Skywest Airlines Inc.','American Airlines Inc.','American Eagle Airlines Inc.'),]
+```
+
+```{r}
+nrow(flight_5)
+```
+```{r}
+#| fig-width: 20
+#| fig-height: 15
+par(mfrow = c(3, 2))
+qqnorm(flight_5$Carrier_Delay_min, ylab = 'Carrier_Delay_min', main = "Carrier_Delay_min"); qqline(flight_5$Carrier_Delay_min,col=2)
+qqnorm(flight_5$Weather_Delay_min, ylab = 'Weather_Delay_min', main = "Weather_Delay_min"); qqline(flight_5$Weather_Delay_min,col=2)
+qqnorm(flight_5$NAS_Delay_min, ylab = 'NAS_Delay_min', main = "NAS_Delay_min"); qqline(flight_5$NAS_Delay_min,col=2)
+qqnorm(flight_5$Security_Delay_min, ylab = 'Security_Delay_min', main = "Security_Delay_min"); qqline(flight_5$Security_Delay_min,col=2)
+qqnorm(flight_5$Late_Aircraft_Delay_min, ylab = 'Late_Aircraft_Delay_min', main = "Late_Aircraft_Delay_min"); qqline(flight_5$Late_Aircraft_Delay_min,col=2)
+qqnorm(flight_5$Arrival_Delay_min, ylab = 'Arrival_Delay_min', main = "Arrival_Delay_min"); qqline(flight_5$Arrival_Delay_min,col=2)
+
+```
+since these distributions are not normal, Parametric statistical studies cannot be performed.
+
+
+```{r}
+library(ggplot2)
+library(reshape2)
+avg_delays <- aggregate(
+  cbind(
+    Carrier_Delay_min, 
+    Weather_Delay_min, 
+    NAS_Delay_min, 
+    Security_Delay_min, 
+    Late_Aircraft_Delay_min
+  ) ~ Carrier_name, 
+  data = flight_5, 
+  FUN = mean, 
+  na.rm = TRUE
+)
+
+delay_long <- melt(
+  avg_delays,
+  id.vars = "Carrier_name"
+)
+
+delay_long <- melt(avg_delays, id.vars = "Carrier_name")
+delay_totals <- aggregate(value ~ Carrier_name, data = delay_long, sum)
+delay_long <- merge(delay_long, delay_totals, by = "Carrier_name", 
+                   suffixes = c("", "_total"))
+delay_long$percentage <- (delay_long$value / delay_long$value_total)*100
+
+threshold <- 0
+delay_long$label <- ifelse(delay_long$percentage >  threshold, sprintf("%.1f%%",delay_long$percentage),"") 
+
+```
+
+
+```{r}
+ggplot(delay_long, aes(x = Carrier_name, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "fill") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5),size = 3)+
+  theme_minimal() +
+  labs(
+    title = "Proportion of Delay Types by Airline",
+    x = "Airline",
+    y = "Percentage",
+    fill = "Delay Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +  
+  scale_y_continuous(labels = scales::percent)
+
+```
+```{r}
+
+flight_5$MonthYear <- format(as.Date(flight_5$Date, "%d-%m-%Y"), "%b-%Y")
+
+# Calculate monthly averages for each airline and delay type
+monthly_delays <- aggregate(
+  cbind(
+    Carrier_Delay_min, 
+    Weather_Delay_min, 
+    NAS_Delay_min, 
+    Security_Delay_min, 
+    Late_Aircraft_Delay_min
+  ) ~ MonthYear + Carrier_name, 
+  data = flight_5, 
+  FUN = mean, 
+ na.rm = TRUE
+)
+```
+
+```{r}
+delay_long <- melt(monthly_delays, 
+                  id.vars = c("MonthYear", "Carrier_name"),
+                  variable.name = "Delay_Type",
+                  value.name="Minutes")
+```
+
+
+#```{r}
+##| fig-width: 10
+##| fig-height: 20
+##| 
+#ggplot(delay_long, aes(x = MonthYear, y = Minutes, color = Delay_Type, group = Delay_Type)) +
+#  geom_line(linewidth = 1) +
+#  geom_point(size = 2) +
+#  facet_wrap(~Carrier_name, ncol = 1, scales = "free_y") +
+#  theme_minimal() +
+#  labs(
+#    title = "Monthly Trends in Airline Delays by Type",
+#    x = "MonthYear",
+#    y = "Average Delay Minutes",
+#    color = "Delay Type"
+#  ) +
+#  theme(
+#    axis.text.x = element_text(angle = 45, hjust = 1),
+#    plot.title = element_text(hjust = 0.5),
+#    legend.position = "right",
+#    strip.text = element_text(face = "bold")
+#  ) +
+# scale_color_brewer(palette="Set1")
+#```
+
+
+
+```{r}
+ggplot(delay_long, aes(x = MonthYear, y = Minutes, color = Delay_Type, 
+                      linetype = Carrier_name, group = interaction(Carrier_name, Delay_Type))) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(
+    title = "Monthly Delay Trends by Airline and Delay Type",
+    x = "MonthYear",
+    y = "Average Delay Minutes",
+    color = "Delay Type",
+    linetype = "Airline"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right"
+  ) +
+  scale_color_brewer(palette="Set1")
+```
