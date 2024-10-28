@@ -19,7 +19,7 @@ This analysis will offer valuable insights to airlines, passengers, and policyma
 
 SMART questions – 
 
-1. What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns correlate with specific routes and time of day
+1. What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns differ across morning, afternoon, and evening flights?
 
 2. For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies
 
