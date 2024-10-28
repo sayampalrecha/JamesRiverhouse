@@ -1,0 +1,31 @@
+Presentation:
+
+
+Project description:
+About the problem
+STAR method: Situation, Task, action and result.
+Descriptive statistics:
+About the dataset:
+Number of rows
+Number of Columns.
+What kind of columns
+Time and routes with the most delay 
+
+Hema Smart question:
+Number of airlines in dataset : 
+Delay reason types:
+
+Smart question :
+“For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies”
+
+Data preprocessing:
+Number of rows before and after outlier removal
+Normality Check (qq plots)
+
+Top 5 airlines boxplot
+Delay reason types:
+Trend 
+
+Sayam SMART question 
+Smart question 
+Season and
