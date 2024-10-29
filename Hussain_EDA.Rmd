@@ -104,21 +104,29 @@ origin_counts <- flight_delays %>%
   group_by(Origin) %>%
   summarise(Frequency = n()) %>%
   arrange(desc(Frequency)) %>%
-  slice(1:10) %>%
   mutate(Type = "Origin")
 
 dest_counts <- flight_delays %>%
   group_by(Dest) %>%
   summarise(Frequency = n()) %>%
   arrange(desc(Frequency)) %>%
-  slice(1:10) %>%
   mutate(Type = "Destination")
 
 origin_counts <- rename(origin_counts, Airport = Origin)
 dest_counts <- rename(dest_counts, Airport = Dest)
+
 combined_counts <- bind_rows(origin_counts, dest_counts)
 
-ggplot(combined_counts, aes(x = reorder(Airport, Frequency), y = Frequency, fill = Type)) +
+top_airports <- combined_counts %>%
+  group_by(Airport) %>%
+  summarise(TotalFrequency = sum(Frequency)) %>%
+  arrange(desc(TotalFrequency)) %>%
+  slice(1:10)
+
+final_counts <- combined_counts %>%
+  filter(Airport %in% top_airports$Airport)
+
+ggplot(final_counts, aes(x = reorder(Airport, Frequency), y = Frequency, fill = Type)) +
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Top 10 Airports by Delay Frequency (Origin vs Destination)",
        x = "Airport", y = "Delay Frequency") +
