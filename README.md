@@ -25,4 +25,6 @@ SMART questions –
 
 3. Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?
 
+4. What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?
+
 Kaggle Dataset: https://www.kaggle.com/datasets/undersc0re/flight-delay-and-causes/data
