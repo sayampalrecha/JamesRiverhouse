@@ -1,0 +1,758 @@
+---
+title: "Predicting and Analyzing U.S. Flight Delays: Identifying Key Factors and Improving Forecast Accuracy"
+Group: "JamesRiverhouse"
+Members: "Hema Puchakayala,  Hussain Nathani, Rasika Nilatkar, Sayyam Palrecha"
+#date: "today"
+date: "`r Sys.Date()`"
+subtitle: "Team 2 - JamesRiverhouse"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r init, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+```{r Libraries, include=T}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+library(corrplot)
+library(scales)
+library(gridExtra)
+library(stats)
+library(reshape2)
+```
+
+# 1. Loading the Dataset
+```{r}
+flight <- data.frame(read.csv("Flight_delay.csv"))
+str(flight)
+```
+
+Dataset loaded..
+
+```{r}
+column_names <- c('Day_of_Week','Date','Departure_Time','Arrival_Time','Scheduled_Arrival_Time',  'Unique_Carrier_Code','Carrier_name', 'Flight_Number','Tail_Number', 'Actual_Elapsed_Time_min','Estimated_Elapsed_Time_min','Air_Time_min', 'Arrival_Delay_min', 'Departure_Delay_min','Origin', 'Origin_Airport','Destination','Destination_Airport', 'Distance_mi','Taxi_In_min','Taxi_Out_min', 'Cancelled', 'CancellationCode','Diverted','Carrier_Delay_min','Weather_Delay_min', 'NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min')
+
+colnames(flight) <- column_names
+unique_carriers <- data.frame(unique(flight[,7]))
+```
+
+
+# 2. Data Cleaning & Summary of Dataset
+
+Summary:
+```{r}
+summary(flight)
+```
+
+Number of rows before Data pre-processing: `r nrow(flight)`
+
+The airlines considered for analysis are:
+
+`r knitr::kable(unique_carriers)`
+
+
+Reasons for the delay:
+
+1. CarrierDelay → Flight delay due to carrier(e.g. maintenance or crew problems, aircraft cleaning, fueling, etc), 0 = No, yes = (in minutes)
+
+2. WeatherDelay → Flight delay due to weather, 0 = No, yes = (in minutes)
+
+3. NASDelay → Flight delay by NSA(National Aviation System), 0 = No, yes = (in minutes)
+
+4. SecurityDelay → Flight delay by security reason, 0 = No, yes = (in minutes)
+
+5. LateAircraftDelay → Flight delay by Aircraft reason, 0 = No, yes = (in minutes)
+
+
+# 3. Data Preprocessing
+
+## 3.1. Outliers and null value removal:
+
+
+```{r}
+remove_outliers <- function(df, columns) {
+    df_clean <- df
+    
+    for(column_name in columns) {
+        # Get the specified column
+        x <- df_clean[[column_name]]
+        
+        # Removing NA values
+        valid_rows <- !is.na(x)
+        x_clean <- x[valid_rows]
+        
+        # Calculating Q1, Q3, and IQR
+        Q1 <- quantile(x_clean, 0.25)
+        Q3 <- quantile(x_clean, 0.75)
+        IQR <- Q3 - Q1
+        
+        # bounds for outlier removal
+        lower_bound <- Q1 - 1.5 * IQR
+        upper_bound <- Q3 + 1.5 * IQR
+        
+        # summary before removal
+        cat("\nProcessing", column_name, ":\n")
+        cat("Original rows:", sum(valid_rows), "\n")
+        cat("Q1:", Q1, "Q3:", Q3, "IQR:", IQR, "\n")
+        cat("Lower bound:", lower_bound, "Upper bound:", upper_bound, "\n")
+        
+        # Deleting outlier rows
+        keep_rows <- x >= lower_bound & x <= upper_bound & valid_rows
+        df_clean <- df_clean[keep_rows, ]
+        
+        # summary after removal
+        cat("Rows after removal:", nrow(df_clean), "\n")
+        cat("Outliers removed:", sum(valid_rows) - nrow(df_clean), "\n\n")
+    }
+    
+    return(df_clean)
+}
+```
+
+
+
+```{r}
+library(ggplot2)
+flight_b <- remove_outliers(flight,c('Arrival_Delay_min','Carrier_Delay_min','Weather_Delay_min','NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min'))
+```
+
+Number of rows after nulls and Outlier removal: `r nrow(flight_b)`
+
+### 3.2. Normality checks:
+
+
+```{r}
+#| fig-width: 20
+#| fig-height: 15
+par(mfrow = c(3, 2))
+qqnorm(flight_b$Carrier_Delay_min, ylab = 'Flight delay due to carrier', main = "Flight delay due to carrier"); qqline(flight_b$Carrier_Delay_min,col=2)
+qqnorm(flight_b$Weather_Delay_min, ylab = 'Flight delay due to weather', main = "Flight delay due to weather"); qqline(flight_b$Weather_Delay_min,col=2)
+qqnorm(flight_b$NAS_Delay_min, ylab = 'NAS_Delay_min', main = "Flight delay by NSA(National Aviation System)"); qqline(flight_b$NAS_Delay_min,col=2)
+qqnorm(flight_b$Security_Delay_min, ylab = 'Security_Delay_min', main = "Flight delay by security reason"); qqline(flight_b$Security_Delay_min,col=2)
+qqnorm(flight_b$Late_Aircraft_Delay_min, ylab = 'Flight delay by Aircraft reason', main = "Flight delay by Aircraft reason"); qqline(flight_b$Late_Aircraft_Delay_min,col=2)
+qqnorm(flight_b$Arrival_Delay_min, ylab = 'Total Delay' , main = "Total Delay"); qqline(flight_b$Arrival_Delay_min,col=2)
+
+```
+
+
+weather and security delays are rare in this dataset and when they occur, they're likely significant outliers.
+
+None of the delay types follow a normal distribution.
+
+Since these distributions are not normal, Parametric statistical studies cannot be performed. 
+
+
+# 4. SMART Questions & EDA 
+
+“For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies”
+
+### 4.1. Identifying top 5 airlines:
+
+```{r}
+#| fig-width: 20
+#| fig-height: 5
+ggplot(flight_b,aes(Carrier_name,Arrival_Delay_min))+geom_boxplot(aes(fill = Carrier_name ))+labs(title = "Box plots of Airlines flight delay distribution") + theme(plot.title = element_text(size = 25,hjust =0.5)) + stat_summary(aes(y = Arrival_Delay_min , label = round(..y.., 2)), 
+                 fun.y = median, geom = "text") 
+
+```
+
+
+
+From the box-plots above, higher median lines are found for:
+
+JetBlue Airways
+
+United Air Lines Inc.
+
+American Eagle Airlines Inc.
+
+American Airlines Inc.
+
+US Airways Inc.
+
+
+```{r}
+flight_5 <- flight_b[flight_b$Carrier_name %in% c('JetBlue Airways','United Air Lines Inc.','US Airways Inc.','American Airlines Inc.','American Eagle Airlines Inc.'),]
+```
+
+### 4.2. Identifying major reasons for these 5 airlines:
+
+```{r}
+library(ggplot2)
+library(reshape2)
+avg_delays <- aggregate(
+  cbind(
+    Carrier_Delay_min, 
+    Weather_Delay_min, 
+    NAS_Delay_min, 
+    Security_Delay_min, 
+    Late_Aircraft_Delay_min
+  ) ~ Carrier_name, 
+  data = flight_5, 
+  FUN = mean, 
+  na.rm = TRUE
+)
+
+delay_long <- melt(
+  avg_delays,
+  id.vars = "Carrier_name"
+)
+
+delay_long <- melt(avg_delays, id.vars = "Carrier_name")
+delay_totals <- aggregate(value ~ Carrier_name, data = delay_long, sum)
+delay_long <- merge(delay_long, delay_totals, by = "Carrier_name", 
+                   suffixes = c("", "_total"))
+delay_long$percentage <- (delay_long$value / delay_long$value_total)*100
+
+threshold <- 0
+delay_long$label <- ifelse(delay_long$percentage >  threshold, sprintf("%.1f%%",delay_long$percentage),"") 
+
+```
+
+
+```{r}
+ggplot(delay_long, aes(x = Carrier_name, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "fill") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5),size = 3)+
+  theme_minimal() +
+  labs(
+    title = "Proportion of Delay Types by Airline",
+    x = "Airline",
+    y = "Percentage",
+    fill = "Delay Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +  
+  scale_y_continuous(labels = scales::percent)
+
+flight_5$MonthYear <- format(as.Date(flight_5$Date, "%d-%m-%Y"), "%b-%Y")
+
+# Calculate monthly averages for each airline and delay type
+monthly_delays <- aggregate(
+  cbind(
+    Carrier_Delay_min, 
+    Weather_Delay_min, 
+    NAS_Delay_min, 
+    Security_Delay_min, 
+    Late_Aircraft_Delay_min
+  ) ~ MonthYear + Carrier_name, 
+  data = flight_5, 
+  FUN = mean, 
+ na.rm = TRUE
+)
+```
+
+
+
+```{r}
+delay_long <- melt(monthly_delays, 
+                  id.vars = c("MonthYear", "Carrier_name"),
+                  variable.name = "Delay_Type",
+                  value.name="Minutes")
+```
+
+
+Analysis from above graph:
+
+1. Late Aircraft Delay dominates across all airlines, accounting for the largest proportion of delays, highest being in JetBlue Airways (64.0%).
+
+2. Followed by Carrier Delay and NAS Delay, all three combined causes 100% delays.
+
+3. Weather and Security delays appear minimal or non-existent
+
+4. Late aircraft delays being dominant suggests a huge impact in airline operations
+
+5. Different airlines might need different strategies based on their delay profiles, for example JetBlue might focus on late aircraft issues, while American Airlines might prioritize carrier-related delays since American Airlines has the highest percentage compared to others.
+
+
+### 4.3. Identifying major reasons for these 5 airlines:
+
+
+
+```{r}
+library(dplyr)
+
+delay_long <- delay_long %>%
+  mutate(
+    MonthDate = as.Date(paste0("01-", MonthYear), format = "%d-%b-%Y"),
+    MonthYear = factor(format(MonthDate, "%b-%Y"),levels = format(sort(unique(MonthDate)),"%b-%Y")))
+ggplot(delay_long, 
+       aes(x = MonthYear, 
+           y = Minutes, 
+           color = Delay_Type, 
+           group = Delay_Type)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~Carrier_name, ncol = 2, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Monthly Delay Trends by Airline and Delay Type",
+    x = "Month-Year",
+    y = "Average Delay Minutes",
+    color = "Delay Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(size = 14, hjust = 0.5),
+    legend.position = "bottom",
+    legend.text = element_text(size = 8),
+    panel.spacing = unit(1, "lines")
+  ) +
+  scale_color_brewer(palette = "Set1") +
+  guides(color = guide_legend(nrow=1))
+
+```
+
+Consistency of analysis over 6 month period:
+
+1. Late Aircraft Delays (orange line) consistently show the highest delays across all airlines
+
+2. Security Delays (purple line) consistently show the lowest delays
+
+3. Most trends remain relatively stable across the 6-month period
+
+
+## SMART - 2
+
+```{r Filtering data, include=T}
+# Filtering Data
+flight_data <- flight_b %>%
+  filter(!is.na(Carrier_Delay_min) | !is.na(Weather_Delay_min) | 
+         !is.na( NAS_Delay_min) | !is.na(Security_Delay_min) | 
+         !is.na(Late_Aircraft_Delay_min))
+```
+
+
+```{r Formatting data, include=T}
+# Formatting Date and adding Month and Season column
+flight_data$Date <- as.Date(flight_data$Date, format = "%d-%m-%Y")
+flight_data_cleaned <- flight_data %>%
+  mutate(Month = month(Date, label = TRUE, abbr = TRUE),
+         Season = case_when(
+           Month %in% c("Dec", "Jan", "Feb") ~ "Winter",
+           Month %in% c("Mar", "Apr", "May") ~ "Spring",
+           Month %in% c("Jun", "Jul", "Aug") ~ "Summer",
+           Month %in% c("Sep", "Oct", "Nov") ~ "Fall"
+         ))
+```
+
+
+```{r Cleaning data, include=T}
+# Cleaning Dataframe
+flight_delays <- flight_data_cleaned %>%
+  filter(!is.na(Carrier_Delay_min) | !is.na(Weather_Delay_min) | 
+         !is.na( NAS_Delay_min) | !is.na(Security_Delay_min) | 
+         !is.na(Late_Aircraft_Delay_min)) %>%
+  select(Origin, Destination, Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, Month, Season)
+```
+
+
+```{r Checking NA values, include=T} 
+# Checking NA count
+na_count <- colSums(is.na(flight_delays))
+#print(na_count)
+```
+
+```{r Cleaned data, include=T}
+#head(flight_delays)
+```
+
+
+```{r Delay checks, include=T}
+### Checking all the rows if delay exists or not
+flight_delays$outcome <- ifelse(rowSums(flight_delays == 0) == ncol(flight_delays), 1, 0)
+no_delay_rows <- flight_delays[flight_delays$outcome == 1, ]
+#head(no_delay_rows)
+```
+
+## 4.1 - Frequency of top 10 Origin and Destination airports delay
+```{r Identifying frequency, include=T}
+origin_counts <- flight_delays %>%
+  group_by(Origin) %>%
+  summarise(Frequency = n()) %>%
+  arrange(desc(Frequency)) %>%
+  mutate(Type = "Origin")
+
+Destination_counts <- flight_delays %>%
+  group_by(Destination) %>%
+  summarise(Frequency = n()) %>%
+  arrange(desc(Frequency)) %>%
+  mutate(Type = "Destination")
+
+origin_counts <- rename(origin_counts, Airport = Origin)
+Destination_counts <- rename(Destination_counts, Airport = Destination)
+
+combined_counts <- bind_rows(origin_counts, Destination_counts)
+
+top_airports <- combined_counts %>%
+  group_by(Airport) %>%
+  summarise(TotalFrequency = sum(Frequency)) %>%
+  arrange(desc(TotalFrequency)) %>%
+  slice(1:10)
+
+final_counts <- combined_counts %>%
+  filter(Airport %in% top_airports$Airport)
+
+ggplot(final_counts, aes(x = reorder(Airport, Frequency), y = Frequency, fill = Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Top 10 Airports by Delay Frequency (Origin vs Destination)",
+       x = "Airport", y = "Delay Frequency") +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_manual(values = c("Origin" = "steelblue", "Destination" = "darkorange"))
+```
+
+## 4.2 - Creating Heatmap to understand delay cause at top 10 airports
+```{r Identifying delay causes, include=T}
+top_origin_airports <- flight_delays %>%
+  group_by(Origin) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Origin)
+
+top_Destination_airports <- flight_delays %>%
+  group_by(Destination) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Destination)
+
+top_airports <- unique(c(top_origin_airports, top_Destination_airports))
+
+filtered_delays <- flight_delays %>%
+  filter(Origin %in% top_airports | Destination %in% top_airports)
+
+heatmap_data <- filtered_delays %>%
+  select(Origin, Destination, Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min) %>%
+  pivot_longer(cols = c(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min),
+               names_to = "DelayType",
+               values_to = "TotalDelay") %>%
+  mutate(Airport = ifelse(Origin %in% top_airports, Origin, Destination)) %>%
+  filter(!is.na(TotalDelay))
+
+heatmap_summary <- heatmap_data %>%
+  group_by(Airport, DelayType) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(heatmap_summary, aes(x = Airport, y = DelayType, fill = TotalDelay)) +
+  geom_tile(color = "black") +
+  scale_fill_gradient(low = "white", high = "blue", na.value = "grey50") +
+  labs(title = "Heatmap of Delay Causes at Top 10 Airports",
+       x = "Airport",
+       y = "Delay Cause",
+       fill = "Total Delay Minutes") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## 4.3 -  Identifying season in which delays occurs the most at top 10 airports
+```{r Identifying seasons, include=T}
+top_origin_airports <- flight_delays %>%
+  group_by(Origin) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Origin)
+
+top_Destination_airports <- flight_delays %>%
+  group_by(Destination) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Destination)
+
+top_airports <- unique(c(top_origin_airports, top_Destination_airports))
+
+filtered_delays <- flight_delays %>%
+  filter(Origin %in% top_airports | Destination %in% top_airports)
+
+print(colnames(filtered_delays))
+
+seasonal_delays <- filtered_delays %>%
+  select(Origin, Destination, Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, Season) %>%
+
+  pivot_longer(cols = c(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min),
+               names_to = "DelayType", values_to = "TotalDelay") %>%
+  mutate(Airport = ifelse(Origin %in% top_airports, Origin, Destination)) %>%
+  group_by(Airport, Season) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE), .groups = 'drop')
+
+ggplot(seasonal_delays, aes(x = Airport, y = TotalDelay, fill = Season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Seasonal Delays for Top 10 Airports",
+       x = "Airport", y = "Total Delay (Minutes)") +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set3")
+```
+
+```{r}
+
+flight_b$Date <- as.Date(flight_b$Date)
+flight_b$Month <- month(flight_b$Date)
+```
+
+```{r}
+# Filter summer months (June-August)
+summer_data <- flight_b %>%filter(Month %in% c(6, 7, 8))
+```
+
+```{r}
+## Calculate average delays by carrier
+carrier_delays <- summer_data %>%
+  group_by(Unique_Carrier_Code) %>%
+  summarise(
+    AvgArrival_Delay_min = mean(Arrival_Delay_min, na.rm = TRUE),
+    AvgDeparture_Delay_min = mean(Departure_Delay_min, na.rm = TRUE),
+    TotalDelay = AvgArrival_Delay_min + AvgDeparture_Delay_min,
+    Carrier_Delay_min = mean(Carrier_Delay_min, na.rm = TRUE),
+    Weather_Delay_min = mean(Weather_Delay_min, na.rm = TRUE)
+  ) %>%
+  arrange(desc(TotalDelay))
+
+top_3_carriers <- head(carrier_delays, 3)
+```
+
+## 4.4 - Top 3 Carriers Average Delays
+```{r}
+
+ggplot(top_3_carriers, aes(x = reorder(Unique_Carrier_Code, -TotalDelay), y = TotalDelay)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = round(TotalDelay, 2)), vjust = -0.5) +
+  theme_minimal() +
+  labs(
+    title = "Top 3 Carriers with Highest Average Delays (Summer Months)",
+    x = "Carrier",
+    y = "Average Total Delay (minutes)"
+  )
+```
+## Time of Day Analysis
+```{r}
+
+summer_data$Hour <- as.numeric(format(strptime(sprintf("%04d", summer_data$Departure_Time),format = "%H%M"), "%H"))
+```
+## 4.5 - Delay Patterns by Time of Day
+```{r}
+# Visualization 2: Delay Patterns by Time of Day
+hourly_delays <- summer_data %>%
+  filter(Unique_Carrier_Code %in% top_3_carriers$Unique_Carrier_Code) %>%
+  group_by(Unique_Carrier_Code, Hour) %>%
+  summarise(AvgDelay = mean(Arrival_Delay_min, na.rm = TRUE))
+
+ggplot(hourly_delays, aes(x = Hour, y = AvgDelay, color = Unique_Carrier_Code)) +
+  geom_line() +
+  geom_smooth(se = FALSE) +
+  theme_minimal() +
+  labs(
+    title = "Delay Patterns by Time of Day",
+    x = "Hour of Day",
+    y = "Average Arrival Delay (minutes)"
+  )
+```
+## Route Analysis
+```{r}
+ 
+route_delays <- summer_data %>%
+  group_by(Unique_Carrier_Code, Origin, Destination) %>%
+  summarise(
+    AvgDelay = mean(Arrival_Delay_min, na.rm = TRUE),
+    flight = n()
+  ) %>%
+  filter(flight >= 50) %>%  # Filter routes with minimum 50 flight
+  arrange(desc(AvgDelay))
+```
+## 4.6 - Top 10 Routes with Highest Delays
+```{r}
+
+top_10_routes <- head(route_delays, 10)
+ggplot(top_10_routes, 
+       aes(x = paste(Origin, "->", Destination), y = AvgDelay, fill = Unique_Carrier_Code)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Top 10 Routes with Highest Average Delays",
+    x = "Route",
+    y = "Average Delay (minutes)"
+  )
+```
+
+```{r}
+# Correlation Analysis
+library(corrplot)
+
+correlation_vars <- summer_data %>%
+  select(Arrival_Delay_min, Departure_Delay_min, Distance_mi, Taxi_In_min, Taxi_Out_min)
+correlation_matrix <- cor(correlation_vars, use = "complete.obs")
+
+# Visualization 4: Correlation Heatmap
+corrplot(correlation_matrix, 
+         method = "color", 
+         type = "upper", 
+         addCoef.col = "black",
+         tl.col = "black",
+         tl.srt = 45)
+```
+
+```{r}
+# Statistical Summary
+summary_stats <- summer_data %>%
+  group_by(Unique_Carrier_Code) %>%
+  filter(Unique_Carrier_Code %in% top_3_carriers$Unique_Carrier_Code) %>%
+  summarise(
+    Mean_Delay = mean(Arrival_Delay_min, na.rm = TRUE),
+    Median_Delay = median(Arrival_Delay_min, na.rm = TRUE),
+    SD_Delay = sd(Arrival_Delay_min, na.rm = TRUE),
+    Total_flight = n(),
+    Delayed_flight = sum(Arrival_Delay_min > 0, na.rm = TRUE),
+    Delay_Rate = Delayed_flight / Total_flight * 100
+  )
+print(summary_stats)
+```
+```{r}
+write.csv(summary_stats, "airline_delay_analysis.csv")
+```
+
+
+```{r, include=T}
+# Data Preprocessing and Summary Statistics
+# Convert time fields to proper format
+flight_b$Departure_Time <- as.numeric(flight_b$Departure_Time)
+flight_b$hour <- floor(flight_b$Departure_Time/100)
+
+# Create binary delay indicator
+flight_b$is_delayed <- ifelse(flight_b$Departure_Delay_min > 15, 1, 0)
+
+# Basic summary statistics
+summary(flight_b)
+
+# Check for missing values
+colSums(is.na(flight_b))
+```
+
+
+
+```{r, include=T}
+# Descriptive Statistics
+hourly_stats <- flight_b %>%
+  group_by(hour) %>%
+  summarise(
+    total_flight = n(),
+    delayed_flight = sum(is_delayed, na.rm = TRUE),
+    delay_rate = delayed_flight/total_flight,
+    avg_delay = mean(Departure_Delay_min, na.rm = TRUE),
+    sd_delay = sd(Departure_Delay_min, na.rm = TRUE),
+    carrier_delay = mean(Carrier_Delay_min, na.rm = TRUE),
+    weather_delay = mean(Weather_Delay_min, na.rm = TRUE),
+    nas_delay = mean( NAS_Delay_min, na.rm = TRUE),
+    security_delay = mean(Security_Delay_min, na.rm = TRUE),
+    late_aircraft_delay = mean(Late_Aircraft_Delay_min, na.rm = TRUE)
+  )
+
+print(hourly_stats)
+```
+
+## 4.7 - Overall Delay pattern by hour
+
+This bar chart showcases Peak Delay Times, lowest delay period and gradual increase in delay for throughout the day. 
+
+Conclusion - 
+Highest delay rates observed during late night and early morning hours (00:00–3:00) and late evening hours (18:00–23:00). Delay rate significantly drops around 5:00 AM, indicating fewer delays early in the morning. Steady increase in delay rate starting from morning hours (6:00) until afternoon, with a noticeable peak by late evening.
+
+```{r, include=T}
+ggplot(hourly_stats, aes(x = factor(hour), y = delay_rate, fill = delay_rate)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgreen", high = "red") +
+  theme_minimal() +
+  labs(title = "Hourly Flight Delay Distribution",
+       x = "Hour of Day",
+       y = "Delay Rate (%)",
+       caption = "Delays > 15 minutes considered",
+       fill = "Delay %") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14),
+    axis.text.x = element_text(angle = 0),
+    legend.position = "right"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+```
+
+
+## 4.8 - Types of Delays by hour 
+
+This time series line graph shows the delay type and which type is causing significant, moderate and limited impact.
+
+Conclusion -> 
+Most Dominant Delay type was Late Aircraft arrival on runway, Second Most common was Carrier Delays, Minimal Delay type was Security, Moderate Delay types were Weather and NAS.
+```{r, include=T}
+delay_types <- hourly_stats %>%
+  select(hour, carrier_delay, weather_delay, nas_delay, 
+         security_delay, late_aircraft_delay) %>%
+  melt(id.vars = "hour")
+
+ggplot(delay_types, aes(x = hour, y = value, color = variable)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Average Delay Minutes by Type and Hour",
+       x = "Hour (24-hour format)",
+       y = "Average Delay (minutes)",
+       color = "Delay Type") +
+  scale_x_continuous(breaks = 0:23) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## 4.9 - Top 5 Airports Delay Analysis
+
+This code performs an analysis of delay rates across the top 5 busiest U.S. airports, specifically examining how delays vary by the hour of the day. It first identifies the top 5 airports by total flight count. For each of these airports, the code calculates the average delay rate and average delay time by hour. Finally, it generates a line plot showing the hourly delay rates for each of these airports, allowing for visual comparison of delay trends throughout the day. This analysis provides insight into peak delay hours and helps identify patterns specific to high-traffic airports.
+
+```{r, include=T}
+top_airports <- flight_b %>%
+  group_by(Origin) %>%
+  summarise(total_flight = n()) %>%
+  arrange(desc(total_flight)) %>%
+  head(5)
+
+airport_hourly <- flight_b %>%
+  filter(Origin %in% top_airports$Origin) %>%
+  group_by(Origin, hour) %>%
+  summarise(
+    delay_rate = mean(is_delayed, na.rm = TRUE),
+    avg_delay = mean(Departure_Delay_min, na.rm = TRUE)
+  )
+
+ggplot(airport_hourly, aes(x = hour, y = delay_rate, color = Origin)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Delay Rates by Hour for Top 5 Airports",
+       x = "Hour (24-hour format)",
+       y = "Delay Rate") +
+  scale_x_continuous(breaks = 0:23) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
