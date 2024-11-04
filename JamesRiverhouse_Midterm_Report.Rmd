@@ -384,13 +384,13 @@ na_count <- colSums(is.na(flight_delays))
 
 
 ```{r Delay checks, include=T}
-### Checking all the rows if delay exists or not
+# Checking all the rows if delay exists or not
 flight_delays$outcome <- ifelse(rowSums(flight_delays == 0) == ncol(flight_delays), 1, 0)
 no_delay_rows <- flight_delays[flight_delays$outcome == 1, ]
 #head(no_delay_rows)
 ```
 
-## 4.1 - Frequency of top 10 Origin and Destination airports delay
+## Frequency of top 10 Origin and Destination airports delay
 ```{r Identifying frequency, include=T}
 origin_counts <- flight_delays %>%
   group_by(Origin) %>%
@@ -427,7 +427,7 @@ ggplot(final_counts, aes(x = reorder(Airport, Frequency), y = Frequency, fill = 
   scale_fill_manual(values = c("Origin" = "steelblue", "Destination" = "darkorange"))
 ```
 
-## 4.2 - Creating Heatmap to understand delay cause at top 10 airports
+## Creating Heatmap to understand delay cause at top 10 airports
 ```{r Identifying delay causes, include=T}
 top_origin_airports <- flight_delays %>%
   group_by(Origin) %>%
@@ -472,7 +472,7 @@ ggplot(heatmap_summary, aes(x = Airport, y = DelayType, fill = TotalDelay)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-## 4.3 -  Identifying season in which delays occurs the most at top 10 airports
+## Identifying season in which delays occurs the most at top 10 airports
 ```{r Identifying seasons, include=T}
 top_origin_airports <- flight_delays %>%
   group_by(Origin) %>%
@@ -512,6 +512,8 @@ ggplot(seasonal_delays, aes(x = Airport, y = TotalDelay, fill = Season)) +
   coord_flip() +
   scale_fill_brewer(palette = "Set3")
 ```
+
+
 
 ```{r}
 
