@@ -41,6 +41,16 @@ library(stats)
 library(reshape2)
 ```
 
+# Introduction:
+
+According to a market report by AirHelp, in 2022, at least 200 million passengers were affected by delays and cancellations in the US, which impacted on the economy of $30–34 billion in the US. With the increasing volume of air traffic, especially during peak travel seasons, understanding the causes and patterns of delays is crucial for airlines and airports to optimize resources and improve performance. This project aims to predict and analyze U.S. flight delays using data-driven techniques in R, focusing on different causes of delays, seasonal variations, and time-of-day effects. By answering key questions, we can provide insights that help airlines and airports mitigate delays and enhance operational efficiency.
+
+Previous research on flight delays has focused on identifying key causes and attempting to forecast delays based on historical data. Studies often show weather as a major contributor, particularly in seasonal peaks, and highlight airports with chronic delays. Many existing analyses have also sought to classify delays by type, allowing airlines to target specific operational changes.
+
+Exploring the dataset collected from Kaggle allows us to see delay patterns directly from the data. By analyzing patterns in delay causes and seasonality, we can make actionable recommendations. Our findings provide airlines and airport management with insights that could lead to better resource allocation and proactive delay management, ultimately improving the traveler experience and operational efficiency.
+
+
+
 # 1. Loading the Dataset
 ```{r}
 flight <- data.frame(read.csv("Flight_delay.csv"))
@@ -86,7 +96,7 @@ Reasons for the delay:
 
 # 3. Data Preprocessing
 
-## 3.1 - Outliers and null value removal
+## 3.1. Outliers and null value removal
 
 
 ```{r}
@@ -138,7 +148,7 @@ flight_b <- remove_outliers(flight,c('Arrival_Delay_min','Carrier_Delay_min','We
 
 Number of rows after nulls and Outlier removal: `r nrow(flight_b)`
 
-## 3.2 - Normality checks
+## 3.2. Normality checks
 
 
 ```{r}
@@ -167,7 +177,7 @@ Since these distributions are not normal, Parametric statistical studies cannot 
 # SMART Q1
 “For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies”
 
-## 4.1 - Identifying top 5 airlines:
+## 4.1. Identifying top 5 airlines:
 
 ```{r}
 #| fig-width: 20
@@ -195,7 +205,7 @@ US Airways Inc.
 flight_5 <- flight_b[flight_b$Carrier_name %in% c('JetBlue Airways','United Air Lines Inc.','US Airways Inc.','American Airlines Inc.','American Eagle Airlines Inc.'),]
 ```
 
-## 4.2 - Identifying major reasons for these 5 airlines:
+## 4.2. Identifying major reasons for these 5 airlines:
 
 ```{r}
 library(ggplot2)
@@ -288,7 +298,7 @@ Analysis from above graph:
 5. Different airlines might need different strategies based on their delay profiles, for example JetBlue might focus on late aircraft issues, while American Airlines might prioritize carrier-related delays since American Airlines has the highest percentage compared to others.
 
 
-## 4.3 - Identifying major reasons for these 5 airlines:
+## 4.3. Identifying major reasons for these 5 airlines
 
 
 ```{r}
@@ -337,7 +347,6 @@ Consistency of analysis over 6 month period:
 
 
 # SMART Q2
-
 “Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?”
 
 ```{r Filtering data, include=T}
@@ -430,7 +439,6 @@ ggplot(final_counts, aes(x = reorder(Airport, Frequency), y = Frequency, fill = 
   coord_flip() +
   scale_fill_manual(values = c("Origin" = "steelblue", "Destination" = "darkorange"))
 ```
-
 Findings: 
 The bar chart illustrated that Chicago O'Hare International Airport (ORD), Dallas/Fort Worth International Airport (DFW), and Hartsfield-Jackson Atlanta International Airport (ATL) consistently had the highest delay frequencies. This visualization allows us to see which airports contribute most to delays, offering insight into which locations could benefit most from improvement initiatives. These airports serve as significant hubs, which likely increases the volume and frequency of delays due to their high operational demands.
 
@@ -481,7 +489,6 @@ ggplot(heatmap_summary, aes(x = Airport, y = DelayType, fill = TotalDelay)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
-
 Findings: The heatmap highlighted Late Aircraft as the leading cause of delays across most airports, followed by NAS delays. This suggests that delays in arriving aircraft often lead to further delays in departing flights. Weather and Carrier delays were less frequent, and Security delays had minimal impact. The use of colour intensity in the heatmap provided a clear view of where each delay type is concentrated, making it easier to pinpoint which airports are heavily affected by specific delay causes.
 
 ## 4.6 -  Identifying season in which delays occurs the most at top 10 airports
@@ -527,7 +534,6 @@ ggplot(seasonal_delays, aes(x = Airport, y = TotalDelay, fill = Season)) +
   coord_flip() +
   scale_fill_brewer(palette = "Set3")
 ```
-
 Findings: The seasonal bar chart revealed that winter had the highest delay minutes, followed by spring. Winter delays are expected due to adverse weather conditions that impact flight operations. This seasonal analysis underscores the importance of season-specific delay mitigation strategies, such as deploying additional resources or preparing contingency plans during peak delay seasons.
 
 ```{r}
