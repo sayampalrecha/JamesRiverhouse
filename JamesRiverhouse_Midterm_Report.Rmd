@@ -69,6 +69,12 @@ unique_carriers <- data.frame(unique(flight[,7]))
 
 # 2. Data Cleaning & Summary of Dataset
 
+The dataset from the Kaggle link titled "Flight Delay and Causes" contains
+comprehensive information on U.S. flight delays, focusing on various causes of delays
+and their impacts across different airlines and airports. The data is sourced from the
+U.S. Department of Transportation's Bureau of Transportation Statistics (BTS) and
+includes detailed records of flight delays, cancellations, and their contributing factors.
+
 Summary:
 ```{r}
 summary(flight)
@@ -836,3 +842,16 @@ ggplot(airport_hourly, aes(x = hour, y = delay_rate, color = Origin)) +
   scale_x_continuous(breaks = 0:23) +
   theme(plot.title = element_text(hjust = 0.5))
 ```
+
+
+# Conclusion
+
+By analyzing flight delay data through exploratory data analysis (EDA) techniques in R,
+we can uncover valuable insights into the causes and patterns of delays across U.S.
+airlines and airports. Identifying trends among the most delayed airlines helps allocate
+resources more effectively to reduce operational inefficiencies. Similarly, understanding
+how delay patterns vary across different times of day and seasons allows both airlines
+and airports to make informed decisions about scheduling and staffing. Ultimately, this
+analysis provides actionable insights that can help mitigate flight delays and improve
+overall passenger satisfaction while enhancing operational resilience within the aviation
+industry.
