@@ -28,3 +28,6 @@ SMART questions –
 4. What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?
 
 Kaggle Dataset: https://www.kaggle.com/datasets/undersc0re/flight-delay-and-causes/data
+
+Github: https://github.com/GWU-JamesRiverHouse/JamesRiverhouse
+
