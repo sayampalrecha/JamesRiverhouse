@@ -5,7 +5,7 @@ Predicting and Analyzing U.S. Flight Delays: Identifying Key Factors and Improvi
 
 Proposal -
 
-Flight delays are one of the most serious challenges in the US aviation industry, causing huge inconvenience and coupled with losses to airline companies. This work examines the key patterns, causes, and trends in US flights taken from January 2017 to July 2022 that have an impact on flight punctuality. This will help airlines understand the root cause of the delay problem and thus enable them to optimize their flight schedule further for better passenger satisfaction.
+Flight delays are one of the most serious challenges in the US aviation industry, causing huge inconvenience and coupled with losses to airline companies. This work examines the key patterns, causes, and trends in US flights taken from January 2019 to June 2019 that impact flight punctuality. This will help airlines understand the root cause of the delay problem and thus enable them to optimize their flight schedule further for better passenger satisfaction.
 
 The dataset from Kaggle contains flight details, including the departure and arrival time, airline operating, airport from which and where it landed, duration of delay, and finally consolidated weather data. This dataset has over millions of values, thereby providing an adequate overview of flight operations and further delays in the US over a considerable period.
 
@@ -24,5 +24,7 @@ SMART questions –
 2. For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies
 
 3. Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?
+
+4. What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?
 
 Kaggle Dataset: https://www.kaggle.com/datasets/undersc0re/flight-delay-and-causes/data

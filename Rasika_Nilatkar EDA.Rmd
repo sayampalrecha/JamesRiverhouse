@@ -1,0 +1,172 @@
+---
+title: "Predicting and Analyzing U.S. Flight Delays: Identifying Key Factors and Improving Forecast Accuracy"
+Group: "JamesRiverhouse"
+Members: "Hema Puchakayala, Rasika Nilatkar, Sayyam Palrecha, Hussain Nathani"
+#date: "today"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+#SMART question - 
+**What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?**
+
+```{r init, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(echo = T, warning = F, results = "markup", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r, include=T}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(gridExtra)
+library(ggplot2)
+library(stats)
+library(reshape2)
+```
+
+```{r, include=T}
+# Read the dataset
+flights <- read.csv("/Users/rasika/Desktop/DATS 6101/Midterm/Flight_delay.csv")
+```
+
+# Data Preprocessing and Summary Statistics
+```{r, include=T}
+# Convert time fields to proper format
+flights$DepTime <- as.numeric(flights$DepTime)
+flights$hour <- floor(flights$DepTime/100)
+
+# Create binary delay indicator
+flights$is_delayed <- ifelse(flights$DepDelay > 15, 1, 0)
+
+# Basic summary statistics
+summary(flights)
+
+# Check for missing values
+colSums(is.na(flights))
+```
+
+# Descriptive Statistics
+
+Distribution of delays by hours
+```{r, include=T}
+hourly_stats <- flights %>%
+  group_by(hour) %>%
+  summarise(
+    total_flights = n(),
+    delayed_flights = sum(is_delayed, na.rm = TRUE),
+    delay_rate = delayed_flights/total_flights,
+    avg_delay = mean(DepDelay, na.rm = TRUE),
+    sd_delay = sd(DepDelay, na.rm = TRUE),
+    carrier_delay = mean(CarrierDelay, na.rm = TRUE),
+    weather_delay = mean(WeatherDelay, na.rm = TRUE),
+    nas_delay = mean(NASDelay, na.rm = TRUE),
+    security_delay = mean(SecurityDelay, na.rm = TRUE),
+    late_aircraft_delay = mean(LateAircraftDelay, na.rm = TRUE)
+  )
+
+print(hourly_stats)
+```
+
+# Overall Delay pattern by hour
+
+This bar chart showcases Peak Delay Times, lowest delay period and gradual increase in delay fo throughout the day. 
+
+Conclusion - 
+Highest delay rates observed during late night and early morning hours (00:00–3:00) and late evening hours (18:00–23:00). Delay rate significantly drops around 5:00 AM, indicating fewer delays early in the morning. Steady increase in delay rate starting from morning hours (6:00) until afternoon, with a noticeable peak by late evening.
+
+```{r, include=T}
+ggplot(hourly_stats, aes(x = factor(hour), y = delay_rate, fill = delay_rate)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgreen", high = "red") +
+  theme_minimal() +
+  labs(title = "Hourly Flight Delay Distribution",
+       x = "Hour of Day",
+       y = "Delay Rate (%)",
+       caption = "Delays > 15 minutes considered",
+       fill = "Delay %") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14),
+    axis.text.x = element_text(angle = 0),
+    legend.position = "right"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+```
+
+
+# Types of Delays by hour 
+
+This time series line graph shows the delay type and which type is causing significant, moderate and limited impact.
+
+Conclusion -> 
+Most Dominant Delay type was Late Aircraft arrival on runway, Second Most common was Carrier Delays, Minimal Delay type was Security, Moderate Delay types were Weather and NAS.
+```{r, include=T}
+delay_types <- hourly_stats %>%
+  select(hour, carrier_delay, weather_delay, nas_delay, 
+         security_delay, late_aircraft_delay) %>%
+  melt(id.vars = "hour")
+
+ggplot(delay_types, aes(x = hour, y = value, color = variable)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Average Delay Minutes by Type and Hour",
+       x = "Hour (24-hour format)",
+       y = "Average Delay (minutes)",
+       color = "Delay Type") +
+  scale_x_continuous(breaks = 0:23) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Top 5 Airports Delay Analysis
+
+This code performs an analysis of delay rates across the top 5 busiest U.S. airports, specifically examining how delays vary by the hour of the day. It first identifies the top 5 airports by total flight count. For each of these airports, the code calculates the average delay rate and average delay time by hour. Finally, it generates a line plot showing the hourly delay rates for each of these airports, allowing for visual comparison of delay trends throughout the day. This analysis provides insight into peak delay hours and helps identify patterns specific to high-traffic airports.
+
+```{r, include=T}
+top_airports <- flights %>%
+  group_by(Origin) %>%
+  summarise(total_flights = n()) %>%
+  arrange(desc(total_flights)) %>%
+  head(5)
+
+airport_hourly <- flights %>%
+  filter(Origin %in% top_airports$Origin) %>%
+  group_by(Origin, hour) %>%
+  summarise(
+    delay_rate = mean(is_delayed, na.rm = TRUE),
+    avg_delay = mean(DepDelay, na.rm = TRUE)
+  )
+
+ggplot(airport_hourly, aes(x = hour, y = delay_rate, color = Origin)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Delay Rates by Hour for Top 5 Airports",
+       x = "Hour (24-hour format)",
+       y = "Delay Rate") +
+  scale_x_continuous(breaks = 0:23) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Result Summary 
+The delays significantly increase as the day progresses, early morning flights (6-8 AM) have the lowest delay frequencies, peak delay times occur in the evening (7-9 PM).
+Regarding Delay types, Late Aircraft delays show the strongest time-of-day pattern, Weather and NAS delays are more randomly distributed and Security delays remain relatively constant throughout the day.
