@@ -21,7 +21,7 @@ SMART questions –
 
 1. What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns correlate with specific routes and time of day
 
-2. For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies
+2. Using logistic regression model to predict flight delays (>60 minutes) for major U.S. carriers during  summer months (June-August) and the correlation it has with the time of the day for top US Air Carriers 
 
 3. Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?
 
