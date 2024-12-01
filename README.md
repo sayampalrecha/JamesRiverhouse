@@ -23,7 +23,7 @@ SMART questions –
 
 2. For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies
 
-3. Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?
+3. Which U.S. airports experience the highest cumulative delays across different causes, and how do these rankings and contributing factors vary by month or season? Can predictive modeling help forecast delays and identify critical trends?
 
 4. What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?
 
