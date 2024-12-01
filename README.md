@@ -21,7 +21,7 @@ SMART questions –
 
 1. What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns correlate with specific routes and time of day
 
-2. For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies
+2. Can we predict the total arrival delay using ML modeling for the top 5 most delayed airlines, using key factors that holds impact on the delay. This helps identify the significant predictors of delays and provides actionable insights for resource allocation and operational planning in future from the data collected from January 2019 to June 2019, catering better customer satisfaction.
 
 3. Which U.S. airports experience the highest cumulative delays across different causes, and how do these rankings and contributing factors vary by month or season? Can predictive modeling help forecast delays and identify critical trends?
 
