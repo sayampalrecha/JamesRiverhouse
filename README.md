@@ -23,7 +23,7 @@ SMART questions –
 
 2. Can we predict the total arrival delay using ML modeling for the top 5 most delayed airlines, using key factors that holds impact on the delay. This helps identify the significant predictors of delays and provides actionable insights for resource allocation and operational planning in future from the data collected from January 2019 to June 2019, catering better customer satisfaction.
 
-3. Which U.S. airports experience the highest cumulative delays across different causes, and how do these rankings and contributing factors vary by month or season? Can predictive modeling help forecast delays and identify critical trends?
+3. What are the significant factors influencing total flight delays across the top 10 busiest U.S. airports over the observed period, and how do these factors vary by season?
 
 4. What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?
 
