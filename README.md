@@ -25,7 +25,7 @@ SMART questions –
 
 3. What are the significant factors influencing total flight delays across the top 10 busiest U.S. airports over the observed period, and how do these factors vary by season?
 
-4. What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?
+4. Can we predict the probability and duration of flight delays based on the time of day and type of delay which include factors like NAS, Security, Late Aircraft?
 
 Kaggle Dataset: https://www.kaggle.com/datasets/undersc0re/flight-delay-and-causes/data
 
