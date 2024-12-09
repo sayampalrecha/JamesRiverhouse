@@ -184,7 +184,7 @@ Since these distributions are not normal, Parametric statistical studies cannot 
 # 4. SMART Questions & EDA 
 
 ## SMART Q1
-“For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies”
+"Can we predict the total arrival delay using ML modeling for the top 5 most delayed airlines, using key factors that holds impact on the delay. This helps identify the significant predictors of delays and provides actionable insights for resource allocation and operational planning in future from the data collected from January 2019 to June 2019, catering better customer satisfaction."
 
 ### 4.1. Identifying top 5 airlines:
 
@@ -215,6 +215,23 @@ US Airways Inc.
 
 ```{r}
 flight_5 <- flight_b[flight_b$Carrier_name %in% c('JetBlue Airways','United Air Lines Inc.','US Airways Inc.','American Airlines Inc.','American Eagle Airlines Inc.'),]
+```
+
+```{r}
+library(dplyr)
+
+# Adding the number of flights on a date level for each origin
+flight_b <- flight_b %>%
+  group_by(Date, Origin) %>%
+  mutate(Flights_At_Origin = n()) %>%
+  ungroup()
+
+# Adding the number of flights on a date level for each destination
+flight_b <- flight_b %>%
+  group_by(Date, Destination) %>%
+  mutate(Flights_At_Destination = n()) %>%
+  ungroup()
+
 ```
 
 ### 4.2. Identifying major reasons for these 5 airlines:
@@ -362,6 +379,248 @@ Consistency of analysis over 6 month period:
 
 3. Most trends remain relatively stable across the 6-month period
 
+### 4.4. Modelling:
+
+
+
+Data preparation for modelling.
+
+#### 4.4.1. Features cleaning:
+
+let's check correlation:
+
+```{r}
+ds <- subset(flight_5,select = -c(Carrier_Delay_min,Origin_Airport,Destination_Airport,CancellationCode,MonthYear,Carrier_name,Weather_Delay_min,NAS_Delay_min,Security_Delay_min,Late_Aircraft_Delay_min))
+
+ds$Cancelled <- as.factor(ds$Cancelled)
+ds$Diverted <- as.factor(ds$Diverted)
+ds$Flight_Number <- as.factor(ds$Flight_Number)
+ds$Tail_Number <- as.factor(ds$Tail_Number)
+```
+
+There are no cancelled and diverted flights, hence let's drop the columns
+
+```{r}
+ds <- subset(ds,select = -c(Cancelled,Diverted))
+```
+
+
+Let's convert columns into factor variables
+
+```{r}
+ds$Day_of_Week <- as.factor(ds$Day_of_Week)
+ds$Date <- as.Date(ds$Date, format = "%d-%m-%Y")
+
+ds$Unique_Carrier_Code <- as.factor(ds$Unique_Carrier_Code)
+ds$Origin <- as.factor(ds$Origin)
+ds$Destination <- as.factor(ds$Destination)
+```
+
+`Arrival_Time`, `Scheduled_Arrilval_Time`, `Departure Time` are left in integer format, since the time of the day are ordinal variables and has clear order.
+
+
+```{r}
+ds <- subset(ds,select = -c(Flight_Number,Tail_Number))
+```
+
+```{r}
+library(dplyr)
+library(scales)
+
+# Calculate percentage and cumulative percentage for Origin-Destination combinations
+origin_dest_filtered <- ds %>%
+  group_by(Origin, Destination) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  arrange(desc(Count)) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100,
+         Cumulative_Percentage = cumsum(Count / sum(Count)) * 100) %>%
+  filter(Cumulative_Percentage <= 80)  # Keep rows within 80% of cumulative frequency
+
+# View the filtered data
+print(origin_dest_filtered)
+
+# Join back with the original dataset (if needed)
+ds_filtered <- ds %>%
+  semi_join(origin_dest_filtered, by = c("Origin", "Destination"))
+
+# View the filtered dataset
+print(ds_filtered)
+
+```
+
+```{r}
+loadPkg("leaps")
+reg.forward10 <- regsubsets(Arrival_Delay_min~., data = ds, nvmax = 10, nbest = 2, method = "forward")
+plot(reg.forward10, scale = "adjr2", main = "Adjusted R^2")
+```
+```{r}
+reg_summary <- summary(reg.forward10)
+best_model_index <- which.max(reg_summary$adjr2)  # Index of highest Adjusted R²
+best_model_features <- reg_summary$which[best_model_index, ]  # Logical vector of selected features
+selected_features <- names(best_model_features[best_model_features == TRUE])[-1]
+cat("Features with the best Adjusted R²:\n")
+print(selected_features)
+ds_filtered <- ds[, c("Arrival_Delay_min", selected_features)]
+```
+Since the features with best Adjusted $R^2$ are `Estimated_Elapsed_Time_min`, `Air_Time_min`, `Departure_Delay_min` , `Taxi_In_min` and `Taxi_Out_min`. Let's re-check Adjusted $R^2$ graph with just these metrics.
+
+```{r}
+loadPkg("leaps")
+reg.forward10 <- regsubsets(Arrival_Delay_min~., data = ds_filtered, nvmax = 10, nbest = 2, method = "forward")
+plot(reg.forward10, scale = "adjr2", main = "Adjusted R^2")
+```
+```{r}
+model <- lm(Arrival_Delay_min ~ Estimated_Elapsed_Time_min+Air_Time_min+Departure_Delay_min+Taxi_In_min+Taxi_Out_min, data = ds)
+summary(model)
+```
+
+$R^2$ value of 1 may seem ideal, it’s rare in real-world datasets. This perfect fit could indicate issues such as:
+Overfitting: The model may be too complex and tightly fit to the specific dataset.
+Multicollinearity: There may be high correlations among the predictors, leading to redundancy.
+
+Let's check multi collinearity for the model.
+```{r}
+xkablevif(model)
+```
+As expected, high multi - collinearity.
+
+Hence, Let's build multiple models using the above variables.
+
+```{r, fig.height=6, fig.width=15}
+correlation_matrix <- cor(select_if(ds_filtered,is.numeric))
+par(mar = c(0, 0, 0, 0), cex.main = 0.8, cex.axis = 0.8, cex.lab = 3.0)
+
+corrplot(correlation_matrix, 
+         method = "color", 
+         addCoef.col = "black", 
+         col = colorRampPalette(c("maroon", "yellow", "white", "lightblue", "palegreen"))(100), 
+         tl.col = "black", 
+         tl.cex = 0.8,          # Scale for text labels
+         tl.srt = 30,           # Rotate labels for better spacing
+         number.cex = 0.8,      # Scale for correlation coefficients
+         mar = c(0, 0, 1, 0),   # Adjust margins (bottom, left, top, right)
+         main = "Correlation plot for top 5 most delayed flight data")
+
+```
+
+`Departure_Delay_min` has high correlation with `Arrival_Delay_min`, which also makes sense because delay in departure also leads to flight reaching the destination late.
+
+```{r}
+model1 <- lm(Arrival_Delay_min~Departure_Delay_min,data = ds_filtered)
+summary(model1)
+```
+$R^2$ being 74.5% and the p-value suggests that `Departure_Delay_min` is a significant factor. The F-statistic is extremely large further confirming the model's overall significance.
+
+The second highest correlated factor is `Taxi_Out_min`.
+
+```{r}
+model2 <- lm(Arrival_Delay_min~(Departure_Delay_min*Taxi_Out_min)^2,data = ds_filtered)
+summary(model2)
+```
+$R^2$ being 80.3% with interaction terms and the p-value suggests that `Departure_Delay_min` and `Taxi_Out_min` are a significant factor. The F-statistic is extremely large further confirming the model's overall significance.
+
+Let's check the VIF of model2
+
+```{r}
+xkablevif(model2)
+```
+
+Vif = 1.03, Hence there's no multicollinearity.
+
+
+This suggests that the time elapsed between departure from the origin airport gate and wheels off is also a significant factor to the predict the flight delay.
+Extended Taxi-Out time often occurs due to congestion at the runway or delays in the sequencing of departures.
+Adverse weather (rainy/winters), Insufficient ground resources (as explored in the EDA).
+Taxi-Out delays peaks during holiday seasons/ winter months, de-icing procedures can extend the Taxi-Out Time, contributing to departure and arrival delays.
+
+
+```{r}
+model3 <- lm(Arrival_Delay_min~(Departure_Delay_min+Taxi_Out_min+Taxi_In_min)^2,data = ds_filtered)
+summary(model3)
+```
+There's a significant improvement in $R^2$ value (82.3%) and p-values suggest that the predictors are significant.
+Same as Taxi_Out delays, Taxi_In delays also peaks during holiday seasons and winter/rainy seasons.
+
+Let's check vif values.
+
+```{r}
+xkablevif(model3)
+```
+
+VIFs until 10 can be accepted.
+
+
+```{r}
+model4 <- lm(Arrival_Delay_min ~ (Departure_Delay_min + Taxi_Out_min + 
+    Taxi_In_min+Air_Time_min)^2, data = ds_filtered)
+summary(model4)
+```
+Not a significant impact on the $R^2$ values.
+Let's check VIF values.
+
+```{r}
+xkablevif(model4)
+```
+
+Multi collinearity kicks in when`Air_Time_min` is added.
+
+```{r}
+model5 <- lm(Arrival_Delay_min ~ (Departure_Delay_min + Taxi_Out_min + 
+    Taxi_In_min+Estimated_Elapsed_Time_min)^2, data = ds_filtered)
+summary(model5)
+```
+$R^2$ didn't improve significantly, but let's check vif
+```{r}
+xkablevif(model5)
+```
+
+VIF crossing 10. Hence, multi collinearity is present.
+
+Now, let's compare model1, model2, model3 using ANOVA tests.
+
+```{r}
+anova_model <- anova(model1,model2,model3)
+anova_model
+```
+Model Comparisons
+Model 1 vs. Model 2:
+
+Adding (Departure_Delay_min * Taxi_Out_min)^2 explains an additional 4,152,475 units of variance (Sum of Sq).
+The F-statistic is 24,285, with a p-value < 2e-16, indicating this improvement is highly significant.
+Model 2 vs. Model 3:
+
+Adding Taxi_In_min and its interactions explains an additional 1,451,645 units of variance (Sum of Sq).
+The F-statistic is 5,660, with a p-value < 2e-16, indicating this improvement is also highly significant.
+
+Each step in model complexity significantly improves the fit, as shown by the large F-statistics and extremely small p-values (< 0.001).]The additional variance explained decreases from Model 2 to Model 3 (4,152,475 vs. 1,451,645). This suggests that while adding more terms improves the model, the magnitude of improvement is smaller.
+
+
+Let's check accuracy for the model built using the features from the best model above:
+
+```{r}
+# For model2
+# Predicted values
+predicted_model2 <- predict(model2, newdata = ds_filtered)
+
+#MSE for model2
+mse_model2 <- mean((ds_filtered$Arrival_Delay_min - predicted_model2)^2)
+
+# RMSE for model2
+rmse_model2 <- sqrt(mse_model2)
+
+cat("Model 2 - Mean Squared Error (MSE):", mse_model2, "\n")
+cat("Model 2 - Root Mean Squared Error (RMSE):", rmse_model2, "\n")
+
+predicted_model3 <- predict(model3, newdata = ds_filtered)
+
+mse_model3 <- mean((ds_filtered$Arrival_Delay_min - predicted_model3)^2)
+
+rmse_model3 <- sqrt(mse_model3)
+
+cat("Model 3 - Mean Squared Error (MSE):", mse_model3, "\n")
+cat("Model 3 - Root Mean Squared Error (RMSE):", rmse_model3, "\n")
+```
+The RMSE of around 9.25-9.76 minutes suggests that, on average, the model's predictions deviate by approximately 9-10 minutes from the actual arrival delay, Given more features in the dataset, this error can be reduced to as minimum as possible.
 
 ## SMART Q2
 “Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?”
