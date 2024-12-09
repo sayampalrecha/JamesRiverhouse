@@ -8,6 +8,8 @@ Course - Data_Science_DATS_6101_Intro_to_Data_Science
 - Flight delays are one of the most serious challenges in the US aviation industry, causing huge inconvenience and coupled with losses to airline companies.<br>
 - This work examines the key patterns, causes, and trends in US flights taken from January 2017 to July 2022 that have an impact on flight punctuality.<br>
 - This will help airlines understand the root cause of the delay problem and thus enable them to optimize their flight schedule further for better passenger satisfaction.
+Flight delays are one of the most serious challenges in the US aviation industry, causing huge inconvenience and coupled with losses to airline companies. This work examines the key patterns, causes, and trends in US flights taken from January 2019 to June 2019 that impact flight punctuality. This will help airlines understand the root cause of the delay problem and thus enable them to optimize their flight schedule further for better passenger satisfaction.
+
 
 - The dataset from Kaggle contains flight details, including the departure and arrival time, airline operating, airport from which and where it landed, duration of delay, and finally consolidated weather data. This dataset has over millions of values, thereby providing an adequate overview of flight operations and further delays in the US over a considerable period.
 
@@ -40,8 +42,13 @@ This analysis will offer valuable insights to airlines, passengers, and policyma
 
 1. What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns correlate with specific routes and time of day
 
-2. For top 5 most delayed airlines, can we identify major reasons and its trend over 6 months, so that it can help airlines to relocate proper resources and improve its operational efficiencies
+2. Can we predict the total arrival delay using ML modeling for the top 5 most delayed airlines, using key factors that holds impact on the delay. This helps identify the significant predictors of delays and provides actionable insights for resource allocation and operational planning in future from the data collected from January 2019 to June 2019, catering better customer satisfaction.
 
-3. Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?
+3. What are the significant factors influencing total flight delays across the top 10 busiest U.S. airports over the observed period, and how do these factors vary by season?
+
+4. Can we predict the probability and duration of flight delays based on the time of day and type of delay which include factors like NAS, Security, Late Aircraft?
 
 Kaggle Dataset: https://www.kaggle.com/datasets/undersc0re/flight-delay-and-causes/data
+
+Github: https://github.com/GWU-JamesRiverHouse/JamesRiverhouse
+

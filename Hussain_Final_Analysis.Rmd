@@ -17,7 +17,7 @@ output:
 ---
 
 # SMART Question
-**Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?**
+**What are the significant factors influencing total flight delays across the top 10 busiest U.S. airports over the observed period, and how do these factors vary by season?**
 
 ```{r init, include=FALSE}
 # some of common options (and the defaults) are: 
@@ -221,6 +221,93 @@ ggplot(seasonal_delays, aes(x = Airport, y = TotalDelay, fill = Season)) +
   scale_fill_brewer(palette = "Set3")
 ```
 
-# Result Summary
+### Two-Sample T-Test: Comparing Delays Between Two Airports
+```{r T-test, include=T}
+airport_data <- flight_delays %>% filter(Origin %in% c("ORD", "DFW"))
 
-The analysis reveals that among U.S. airports, **O'Hare International (ORD), Hartsfield-Jackson Atlanta International (ATL), and Dallas/Fort Worth International (DFW)** consistently rank as the top three airports with the highest cumulative delays across various causes. The primary contributors to these delays are Late Aircraft Delays, NAS Delays, and Carrier Delays, whereas Weather Delays occur less frequently, and Security Delays are rare. Additionally, delays peak during the Winter season, with Spring and Summer following in frequency, indicating a seasonal pattern that could aid in better resource allocation and management at these airports.
+t_test_result <- t.test(
+  LateAircraftDelay ~ Origin,
+  data = airport_data,
+  alternative = "two.sided")
+
+print(t_test_result)
+```
+
+### ANOVA: Comparing Mean Delays Across Seasons
+```{r Anova-test, include=T}
+anova_result <- aov(CarrierDelay ~ Season, data = flight_delays)
+summary(anova_result)
+```
+
+### Tukey HSD test for identifying which pairs of seasons differ significantly
+```{r Tukey-test, include=T}
+tukey_result <- TukeyHSD(anova_result)
+
+print(tukey_result)
+```
+
+### Linear Regression Model to Analyze Total Flight Delays Across Airports and Seasons
+```{r LM, include=T}
+flight_data_cleaned <- seasonal_delays %>%
+  group_by(Airport, Season) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE), .groups = 'drop')
+
+flight_data_cleaned$Season <- factor(flight_data_cleaned$Season, levels = c("Winter", "Spring", "Summer", "Fall"))
+
+model <- lm(TotalDelay ~ Airport + Season, data = flight_data_cleaned)
+
+xkabledply(model, title = paste("Model :", format(formula(model)) ) )
+summary(model)
+```
+
+```{r}
+predictions <- predict(model, newdata = flight_data_cleaned)
+
+predictions
+```
+
+### Visualizing Predictions versus Actual values
+```{r Predictions, include=T}
+plot(flight_data_cleaned$TotalDelay, type = "p", col = "blue", pch = 16, cex = 1.2,
+     xlab = "Observation Index", ylab = "TotalDelay",
+     main = "Comparison of Actual and Predicted Total Delays")
+
+points(predictions, col = "red", pch = 17, cex = 1.2)
+
+legend("topright", legend = c("Actual", "Predicted"),
+       col = c("blue", "red"), pch = c(16, 17), cex = 0.8)
+```
+
+
+```{r}
+par(mfrow = c(2, 2))
+plot(model)
+```
+
+```{r}
+mse <- mean(model$residuals^2)
+print(mse)
+
+rmse <- sqrt(mse)
+print(rmse)
+```
+
+# Final Conclusion:
+
+1. Key Factors Influencing Flight Delays:
+Late Aircraft Delays, NAS Delays, and Carrier Delays are the primary contributors to total flight delays. Weather-related delays occur less frequently, while Security Delays are rare.
+Airports such as O'Hare International (ORD), Dallas/Fort Worth International (DFW), and Hartsfield-Jackson Atlanta International (ATL) consistently experience the highest cumulative delays due to these factors.
+
+2. Seasonal Variations:
+The Winter season experiences higher delays compared to other seasons, with Summer seeing fewer delays, as confirmed by the ANOVA test and the Tukey HSD test.
+
+3. Airport-Specific Findings:
+O'Hare International (ORD) and Dallas/Fort Worth International (DFW) are outliers with consistently higher delays, as shown by the T-test results.
+On the other hand, airports like JFK and LGA experience lower delays, making them more efficient in terms of total delays compared to others.
+
+4. Linear Regression Model Insights:
+Airports like JFK and LGA experience significantly lower delays compared to the baseline, while ORD experiences higher delays.
+Season is a significant predictor of delays, with Summer having fewer delays than Winter. The model's Multiple R-squared value of 0.891 indicates a strong fit, suggesting that these factors together explain a significant portion of the variation in total delays.
+
+5. Model Performance:
+The Mean Squared Error (MSE) of 3.58e+10 and Root Mean Squared Error (RMSE) of 189,221 indicate a reasonable fit, with the model performing adequately in predicting total flight delays across airports and seasons.
