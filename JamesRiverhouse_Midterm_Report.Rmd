@@ -595,32 +595,64 @@ The F-statistic is 5,660, with a p-value < 2e-16, indicating this improvement is
 Each step in model complexity significantly improves the fit, as shown by the large F-statistics and extremely small p-values (< 0.001).]The additional variance explained decreases from Model 2 to Model 3 (4,152,475 vs. 1,451,645). This suggests that while adding more terms improves the model, the magnitude of improvement is smaller.
 
 
-Let's check accuracy for the model built using the features from the best model above:
+Let's check MSE and RMSE for the model built using the features from the best model above:
 
 ```{r}
-# For model2
-# Predicted values
-predicted_model2 <- predict(model2, newdata = ds_filtered)
+library(caTools)
+set.seed(123) #for reproducability
+split <- sample.split(ds_filtered$Arrival_Delay_min, SplitRatio = 0.8)
+train_data <- subset(ds_filtered, split == TRUE)
+test_data <- subset(ds_filtered, split == FALSE)
+model2_train <- lm(Arrival_Delay_min ~ (Departure_Delay_min*Taxi_Out_min)^2, data = train_data)
+model3_train <- lm(Arrival_Delay_min~(Departure_Delay_min+Taxi_Out_min+Taxi_In_min)^2, data = train_data)
 
-#MSE for model2
-mse_model2 <- mean((ds_filtered$Arrival_Delay_min - predicted_model2)^2)
+predictions_2_test <- predict(model2_train, newdata = test_data)
+predictions_3_test <- predict(model3_train, newdata = test_data)
 
-# RMSE for model2
-rmse_model2 <- sqrt(mse_model2)
-
-cat("Model 2 - Mean Squared Error (MSE):", mse_model2, "\n")
-cat("Model 2 - Root Mean Squared Error (RMSE):", rmse_model2, "\n")
-
-predicted_model3 <- predict(model3, newdata = ds_filtered)
-
-mse_model3 <- mean((ds_filtered$Arrival_Delay_min - predicted_model3)^2)
-
-rmse_model3 <- sqrt(mse_model3)
-
-cat("Model 3 - Mean Squared Error (MSE):", mse_model3, "\n")
-cat("Model 3 - Root Mean Squared Error (RMSE):", rmse_model3, "\n")
+predictions_2_train <- predict(model2_train, newdata = train_data)
+predictions_2_train <- predict(model2_train, newdata = train_data)
 ```
-The RMSE of around 9.25-9.76 minutes suggests that, on average, the model's predictions deviate by approximately 9-10 minutes from the actual arrival delay, Given more features in the dataset, this error can be reduced to as minimum as possible.
+
+```{r}
+# Function to calculate MSE
+calculate_mse <- function(actuals, predictions) {
+  mean((actuals - predictions)^2)
+}
+
+# Function to calculate RMSE
+calculate_rmse <- function(actuals, predictions) {
+  sqrt(calculate_mse(actuals, predictions))
+}
+
+# Calculate MSE and RMSE for model2 (Train and Test)
+mse_model2_train <- calculate_mse(train_data$Arrival_Delay_min, predictions_2_train)
+rmse_model2_train <- calculate_rmse(train_data$Arrival_Delay_min, predictions_2_train)
+
+mse_model2_test <- calculate_mse(test_data$Arrival_Delay_min, predictions_2_test)
+rmse_model2_test <- calculate_rmse(test_data$Arrival_Delay_min, predictions_2_test)
+
+# Calculate MSE and RMSE for model3 (Train and Test)
+predictions_3_train <- predict(model3_train, newdata = train_data)  # Predictions for training data
+
+mse_model3_train <- calculate_mse(train_data$Arrival_Delay_min, predictions_3_train)
+rmse_model3_train <- calculate_rmse(train_data$Arrival_Delay_min, predictions_3_train)
+
+mse_model3_test <- calculate_mse(test_data$Arrival_Delay_min, predictions_3_test)
+rmse_model3_test <- calculate_rmse(test_data$Arrival_Delay_min, predictions_3_test)
+
+# Print results
+cat("Model 2 - Training MSE:", mse_model2_train, "RMSE:", rmse_model2_train, "\n")
+cat("Model 2 - Testing MSE:", mse_model2_test, "RMSE:", rmse_model2_test, "\n\n")
+
+cat("Model 3 - Training MSE:", mse_model3_train, "RMSE:", rmse_model3_train, "\n")
+cat("Model 3 - Testing MSE:", mse_model3_test, "RMSE:", rmse_model3_test, "\n")
+
+```
+Both Model 2 and Model 3 demonstrate low MSE and RMSE values for both training and testing datasets, indicating they are well-fitted to the data and capable of making accurate predictions.
+The RMSE values are close to each other for the training and testing sets, showing no signs of overfitting or underfitting.
+
+The lower MSE and RMSE for Model 3 suggest it should be preferred for predicting Arrival_Delay_min.
+
 
 ## SMART Q2
 “Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?”
