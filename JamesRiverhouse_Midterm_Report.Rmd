@@ -382,10 +382,7 @@ Consistency of analysis over 6 month period:
 ### 4.4. Modelling:
 
 
-
 Data preparation for modelling.
-
-#### 4.4.1. Features cleaning:
 
 let's check correlation:
 
@@ -423,30 +420,6 @@ ds$Destination <- as.factor(ds$Destination)
 ds <- subset(ds,select = -c(Flight_Number,Tail_Number))
 ```
 
-```{r}
-library(dplyr)
-library(scales)
-
-# Calculate percentage and cumulative percentage for Origin-Destination combinations
-origin_dest_filtered <- ds %>%
-  group_by(Origin, Destination) %>%
-  summarise(Count = n(), .groups = "drop") %>%
-  arrange(desc(Count)) %>%
-  mutate(Percentage = (Count / sum(Count)) * 100,
-         Cumulative_Percentage = cumsum(Count / sum(Count)) * 100) %>%
-  filter(Cumulative_Percentage <= 80)  # Keep rows within 80% of cumulative frequency
-
-# View the filtered data
-print(origin_dest_filtered)
-
-# Join back with the original dataset (if needed)
-ds_filtered <- ds %>%
-  semi_join(origin_dest_filtered, by = c("Origin", "Destination"))
-
-# View the filtered dataset
-print(ds_filtered)
-
-```
 
 ```{r}
 loadPkg("leaps")
