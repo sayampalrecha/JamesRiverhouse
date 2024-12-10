@@ -1,0 +1,1121 @@
+---
+title: "Predicting and Analyzing U.S. Flight Delays: Identifying Key Factors and Improving Forecast Accuracy"
+Group: "JamesRiverhouse"
+Members: "Hema Puchakayala,  Hussain Nathani, Rasika Nilatkar, Sayyam Palrecha"
+#date: "today"
+date: "`r Sys.Date()`"
+subtitle: "Team 2 - JamesRiverhouse"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r init, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+```{r Libraries, include=T}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+library(corrplot)
+library(scales)
+library(gridExtra)
+library(stats)
+library(reshape2)
+```
+
+# Introduction:
+
+According to a market report by AirHelp, in 2022, at least 200 million passengers were affected by delays and cancellations in the US, which impacted on the economy of $30–34 billion in the US. With the increasing volume of air traffic, especially during peak travel seasons, understanding the causes and patterns of delays is crucial for airlines and airports to optimize resources and improve performance. This project aims to predict and analyze U.S. flight delays using data-driven techniques in R, focusing on different causes of delays, seasonal variations, and time-of-day effects. By answering key questions, we can provide insights that help airlines and airports mitigate delays and enhance operational efficiency.
+
+Previous research on flight delays has focused on identifying key causes and attempting to forecast delays based on historical data. Studies often show weather as a major contributor, particularly in seasonal peaks, and highlight airports with chronic delays. Many existing analyses have also sought to classify delays by type, allowing airlines to target specific operational changes.
+
+Exploring the dataset collected from Kaggle allows us to see delay patterns directly from the data. By analyzing patterns in delay causes and seasonality, we can make actionable recommendations. Our findings provide airlines and airport management with insights that could lead to better resource allocation and proactive delay management, ultimately improving the traveler experience and operational efficiency.
+
+
+
+# 1. Loading the Dataset
+```{r}
+flight <- data.frame(read.csv("Flight_delay.csv"))
+str(flight)
+```
+
+Dataset loaded..
+
+```{r}
+column_names <- c('Day_of_Week','Date','Departure_Time','Arrival_Time','Scheduled_Arrival_Time',  'Unique_Carrier_Code','Carrier_name', 'Flight_Number','Tail_Number', 'Actual_Elapsed_Time_min','Estimated_Elapsed_Time_min','Air_Time_min', 'Arrival_Delay_min', 'Departure_Delay_min','Origin', 'Origin_Airport','Destination','Destination_Airport', 'Distance_mi','Taxi_In_min','Taxi_Out_min', 'Cancelled', 'CancellationCode','Diverted','Carrier_Delay_min','Weather_Delay_min', 'NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min')
+
+colnames(flight) <- column_names
+unique_carriers <- data.frame(unique(flight[,7]))
+```
+
+
+# 2. Data Cleaning & Summary of Dataset
+
+The dataset from the Kaggle link titled "Flight Delay and Causes" contains
+comprehensive information on U.S. flight delays, focusing on various causes of delays
+and their impacts across different airlines and airports. The data is sourced from the
+U.S. Department of Transportation's Bureau of Transportation Statistics (BTS) and
+includes detailed records of flight delays, cancellations, and their contributing factors.
+
+Summary:
+```{r}
+summary(flight)
+```
+
+Number of rows before Data pre-processing: `r nrow(flight)`
+
+The airlines considered for analysis are:
+
+`r knitr::kable(unique_carriers)`
+
+
+Reasons for the delay:
+
+1. CarrierDelay → Flight delay due to carrier(e.g. maintenance or crew problems, aircraft cleaning, fueling, etc), 0 = No, yes = (in minutes)
+
+2. WeatherDelay → Flight delay due to weather, 0 = No, yes = (in minutes)
+
+3. NASDelay → Flight delay by NSA(National Aviation System), 0 = No, yes = (in minutes)
+
+4. SecurityDelay → Flight delay by security reason, 0 = No, yes = (in minutes)
+
+5. LateAircraftDelay → Flight delay by Aircraft reason, 0 = No, yes = (in minutes)
+
+
+# 3. Data Preprocessing
+
+## 3.1. Outliers and null value removal
+
+Outlier removal improves data analysis accuracy by eliminating extreme values that can skew statistical measures and models. This leads to more reliable and interpretable results.
+
+```{r}
+remove_outliers <- function(df, columns) {
+    df_clean <- df
+    
+    for(column_name in columns) {
+        # Get the specified column
+        x <- df_clean[[column_name]]
+        
+        # Removing NA values
+        valid_rows <- !is.na(x)
+        x_clean <- x[valid_rows]
+        
+        # Calculating Q1, Q3, and IQR
+        Q1 <- quantile(x_clean, 0.25)
+        Q3 <- quantile(x_clean, 0.75)
+        IQR <- Q3 - Q1
+        
+        # bounds for outlier removal
+        lower_bound <- Q1 - 1.5 * IQR
+        upper_bound <- Q3 + 1.5 * IQR
+        
+        # summary before removal
+        cat("\nProcessing", column_name, ":\n")
+        cat("Original rows:", sum(valid_rows), "\n")
+        cat("Q1:", Q1, "Q3:", Q3, "IQR:", IQR, "\n")
+        cat("Lower bound:", lower_bound, "Upper bound:", upper_bound, "\n")
+        
+        # Deleting outlier rows
+        keep_rows <- x >= lower_bound & x <= upper_bound & valid_rows
+        df_clean <- df_clean[keep_rows, ]
+        
+        # summary after removal
+        cat("Rows after removal:", nrow(df_clean), "\n")
+        cat("Outliers removed:", sum(valid_rows) - nrow(df_clean), "\n\n")
+    }
+    
+    return(df_clean)
+}
+```
+
+
+
+```{r}
+library(ggplot2)
+flight_b <- remove_outliers(flight,c('Arrival_Delay_min','Carrier_Delay_min','Weather_Delay_min','NAS_Delay_min','Security_Delay_min','Late_Aircraft_Delay_min'))
+```
+
+Number of rows after nulls and Outlier removal: `r nrow(flight_b)`
+
+## 3.2. Normality checks
+
+Parametrical statistical testing can be done if the data points are normal. Let's check.
+
+
+```{r}
+#| fig-width: 20
+#| fig-height: 15
+par(mfrow = c(3, 2))
+qqnorm(flight_b$Carrier_Delay_min, ylab = 'Flight delay due to carrier', main = "Flight delay due to carrier"); qqline(flight_b$Carrier_Delay_min,col=2)
+qqnorm(flight_b$Weather_Delay_min, ylab = 'Flight delay due to weather', main = "Flight delay due to weather"); qqline(flight_b$Weather_Delay_min,col=2)
+qqnorm(flight_b$NAS_Delay_min, ylab = 'NAS_Delay_min', main = "Flight delay by NSA(National Aviation System)"); qqline(flight_b$NAS_Delay_min,col=2)
+qqnorm(flight_b$Security_Delay_min, ylab = 'Security_Delay_min', main = "Flight delay by security reason"); qqline(flight_b$Security_Delay_min,col=2)
+qqnorm(flight_b$Late_Aircraft_Delay_min, ylab = 'Flight delay by Aircraft reason', main = "Flight delay by Aircraft reason"); qqline(flight_b$Late_Aircraft_Delay_min,col=2)
+qqnorm(flight_b$Arrival_Delay_min, ylab = 'Total Delay' , main = "Total Delay"); qqline(flight_b$Arrival_Delay_min,col=2)
+
+```
+
+
+weather and security delays are rare in this dataset and when they occur, they're likely significant outliers.
+
+None of the delay types follow a normal distribution.
+
+Since these distributions are not normal, Parametric statistical studies cannot be performed. 
+
+
+# 4. SMART Questions & EDA 
+
+## SMART Q1
+"Can we predict the total arrival delay using ML modeling for the top 5 most delayed airlines, using key factors that holds impact on the delay. This helps identify the significant predictors of delays and provides actionable insights for resource allocation and operational planning in future from the data collected from January 2019 to June 2019, catering better customer satisfaction."
+
+### 4.1. Identifying top 5 airlines:
+
+To Identify top 5 airlines, comparing median and mean values on boxplots would help.
+
+
+```{r}
+#| fig-width: 20
+#| fig-height: 5
+ggplot(flight_b,aes(Carrier_name,Arrival_Delay_min))+geom_boxplot(aes(fill = Carrier_name ))+labs(title = "Box plots of Airlines flight delay distribution") + theme(plot.title = element_text(size = 25,hjust =0.5)) + stat_summary(aes(y = Arrival_Delay_min , label = round(..y.., 2)), 
+                 fun.y = median, geom = "text") 
+```
+
+
+
+From the box-plots above, higher median lines are found for:
+
+JetBlue Airways
+
+United Air Lines Inc.
+
+American Eagle Airlines Inc.
+
+American Airlines Inc.
+
+US Airways Inc.
+
+
+```{r}
+flight_5 <- flight_b[flight_b$Carrier_name %in% c('JetBlue Airways','United Air Lines Inc.','US Airways Inc.','American Airlines Inc.','American Eagle Airlines Inc.'),]
+```
+
+```{r}
+library(dplyr)
+
+# Adding the number of flights on a date level for each origin
+flight_b <- flight_b %>%
+  group_by(Date, Origin) %>%
+  mutate(Flights_At_Origin = n()) %>%
+  ungroup()
+
+# Adding the number of flights on a date level for each destination
+flight_b <- flight_b %>%
+  group_by(Date, Destination) %>%
+  mutate(Flights_At_Destination = n()) %>%
+  ungroup()
+
+```
+
+### 4.2. Identifying major reasons for these 5 airlines:
+
+If we can understand the major reasons impacting top 5 delayed airlines, that would cover majority of the delayed reasons in the US according to the available dataset.
+
+
+```{r}
+library(ggplot2)
+library(reshape2)
+avg_delays <- aggregate(
+  cbind(
+    Carrier_Delay_min, 
+    Weather_Delay_min, 
+    NAS_Delay_min, 
+    Security_Delay_min, 
+    Late_Aircraft_Delay_min
+  ) ~ Carrier_name, 
+  data = flight_5, 
+  FUN = mean, 
+  na.rm = TRUE
+)
+
+delay_long <- melt(
+  avg_delays,
+  id.vars = "Carrier_name"
+)
+
+delay_long <- melt(avg_delays, id.vars = "Carrier_name")
+delay_totals <- aggregate(value ~ Carrier_name, data = delay_long, sum)
+delay_long <- merge(delay_long, delay_totals, by = "Carrier_name", 
+                   suffixes = c("", "_total"))
+delay_long$percentage <- (delay_long$value / delay_long$value_total)*100
+
+threshold <- 0
+delay_long$label <- ifelse(delay_long$percentage >  threshold, sprintf("%.1f%%",delay_long$percentage),"") 
+
+```
+
+
+```{r}
+ggplot(delay_long, aes(x = Carrier_name, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "fill") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5),size = 3)+
+  theme_minimal() +
+  labs(
+    title = "Proportion of Delay Types by Airline",
+    x = "Airline",
+    y = "Percentage",
+    fill = "Delay Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +  
+  scale_y_continuous(labels = scales::percent)
+
+flight_5$MonthYear <- format(as.Date(flight_5$Date, "%d-%m-%Y"), "%b-%Y")
+
+# Calculate monthly averages for each airline and delay type
+monthly_delays <- aggregate(
+  cbind(
+    Carrier_Delay_min, 
+    Weather_Delay_min, 
+    NAS_Delay_min, 
+    Security_Delay_min, 
+    Late_Aircraft_Delay_min
+  ) ~ MonthYear + Carrier_name, 
+  data = flight_5, 
+  FUN = mean, 
+ na.rm = TRUE
+)
+```
+
+
+
+```{r}
+delay_long <- melt(monthly_delays, 
+                  id.vars = c("MonthYear", "Carrier_name"),
+                  variable.name = "Delay_Type",
+                  value.name="Minutes")
+```
+
+
+Analysis from above graph:
+
+1. Late Aircraft Delay dominates across all airlines, accounting for the largest proportion of delays, highest being in JetBlue Airways (64.0%).
+
+2. Followed by Carrier Delay and NAS Delay, all three combined causes 100% delays.
+
+3. Weather and Security delays appear minimal or non-existent
+
+4. Late aircraft delays being dominant suggests a huge impact in airline operations
+
+5. Different airlines might need different strategies based on their delay profiles, for example JetBlue might focus on late aircraft issues, while American Airlines might prioritize carrier-related delays since American Airlines has the highest percentage compared to others.
+
+
+### 4.3. Identifying major reasons for these 5 airlines
+
+To validate if the top5 reasons are major reasons impacting most of the flight delays, let's check the consistency of the reasons percentage across the available timeline.
+
+
+```{r}
+library(dplyr)
+
+delay_long <- delay_long %>%
+  mutate(
+    MonthDate = as.Date(paste0("01-", MonthYear), format = "%d-%b-%Y"),
+    MonthYear = factor(format(MonthDate, "%b-%Y"),levels = format(sort(unique(MonthDate)),"%b-%Y")))
+ggplot(delay_long, 
+       aes(x = MonthYear, 
+           y = Minutes, 
+           color = Delay_Type, 
+           group = Delay_Type)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~Carrier_name, ncol = 2, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Monthly Delay Trends by Airline and Delay Type",
+    x = "Month-Year",
+    y = "Average Delay Minutes",
+    color = "Delay Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(size = 14, hjust = 0.5),
+    legend.position = "bottom",
+    legend.text = element_text(size = 8),
+    panel.spacing = unit(1, "lines")
+  ) +
+  scale_color_brewer(palette = "Set1") +
+  guides(color = guide_legend(nrow=1))
+
+```
+
+Consistency of analysis over 6 month period:
+
+1. Late Aircraft Delays (orange line) consistently show the highest delays across all airlines
+
+2. Security Delays (purple line) consistently show the lowest delays
+
+3. Most trends remain relatively stable across the 6-month period
+
+### 4.4. Modelling:
+
+
+Data preparation for modelling.
+
+let's check correlation:
+
+```{r}
+ds <- subset(flight_5,select = -c(Carrier_Delay_min,Origin_Airport,Destination_Airport,CancellationCode,MonthYear,Carrier_name,Weather_Delay_min,NAS_Delay_min,Security_Delay_min,Late_Aircraft_Delay_min))
+
+ds$Cancelled <- as.factor(ds$Cancelled)
+ds$Diverted <- as.factor(ds$Diverted)
+ds$Flight_Number <- as.factor(ds$Flight_Number)
+ds$Tail_Number <- as.factor(ds$Tail_Number)
+```
+
+There are no cancelled and diverted flights, hence let's drop the columns
+
+```{r}
+ds <- subset(ds,select = -c(Cancelled,Diverted))
+```
+
+
+Let's convert columns into factor variables
+
+```{r}
+ds$Day_of_Week <- as.factor(ds$Day_of_Week)
+ds$Date <- as.Date(ds$Date, format = "%d-%m-%Y")
+
+ds$Unique_Carrier_Code <- as.factor(ds$Unique_Carrier_Code)
+ds$Origin <- as.factor(ds$Origin)
+ds$Destination <- as.factor(ds$Destination)
+```
+
+`Arrival_Time`, `Scheduled_Arrilval_Time`, `Departure Time` are left in integer format, since the time of the day are ordinal variables and has clear order.
+
+
+```{r}
+ds <- subset(ds,select = -c(Flight_Number,Tail_Number))
+```
+
+
+```{r}
+loadPkg("leaps")
+reg.forward10 <- regsubsets(Arrival_Delay_min~., data = ds, nvmax = 10, nbest = 2, method = "forward")
+plot(reg.forward10, scale = "adjr2", main = "Adjusted R^2")
+```
+```{r}
+reg_summary <- summary(reg.forward10)
+best_model_index <- which.max(reg_summary$adjr2)  # Index of highest Adjusted R²
+best_model_features <- reg_summary$which[best_model_index, ]  # Logical vector of selected features
+selected_features <- names(best_model_features[best_model_features == TRUE])[-1]
+cat("Features with the best Adjusted R²:\n")
+print(selected_features)
+ds_filtered <- ds[, c("Arrival_Delay_min", selected_features)]
+```
+Since the features with best Adjusted $R^2$ are `Estimated_Elapsed_Time_min`, `Air_Time_min`, `Departure_Delay_min` , `Taxi_In_min` and `Taxi_Out_min`. Let's re-check Adjusted $R^2$ graph with just these metrics.
+
+```{r}
+loadPkg("leaps")
+reg.forward10 <- regsubsets(Arrival_Delay_min~., data = ds_filtered, nvmax = 10, nbest = 2, method = "forward")
+plot(reg.forward10, scale = "adjr2", main = "Adjusted R^2")
+```
+```{r}
+model <- lm(Arrival_Delay_min ~ Estimated_Elapsed_Time_min+Air_Time_min+Departure_Delay_min+Taxi_In_min+Taxi_Out_min, data = ds)
+summary(model)
+```
+
+$R^2$ value of 1 may seem ideal, it’s rare in real-world datasets. This perfect fit could indicate issues such as:
+Overfitting: The model may be too complex and tightly fit to the specific dataset.
+Multicollinearity: There may be high correlations among the predictors, leading to redundancy.
+
+Let's check multi collinearity for the model.
+```{r}
+xkablevif(model)
+```
+As expected, high multi - collinearity.
+
+Hence, Let's build multiple models using the above variables.
+
+```{r, fig.height=6, fig.width=15}
+correlation_matrix <- cor(select_if(ds_filtered,is.numeric))
+par(mar = c(0, 0, 0, 0), cex.main = 0.8, cex.axis = 0.8, cex.lab = 3.0)
+
+corrplot(correlation_matrix, 
+         method = "color", 
+         addCoef.col = "black", 
+         col = colorRampPalette(c("maroon", "yellow", "white", "lightblue", "palegreen"))(100), 
+         tl.col = "black", 
+         tl.cex = 0.8,          # Scale for text labels
+         tl.srt = 30,           # Rotate labels for better spacing
+         number.cex = 0.8,      # Scale for correlation coefficients
+         mar = c(0, 0, 1, 0),   # Adjust margins (bottom, left, top, right)
+         main = "Correlation plot for top 5 most delayed flight data")
+
+```
+
+`Departure_Delay_min` has high correlation with `Arrival_Delay_min`, which also makes sense because delay in departure also leads to flight reaching the destination late.
+
+```{r}
+model1 <- lm(Arrival_Delay_min~Departure_Delay_min,data = ds_filtered)
+summary(model1)
+```
+$R^2$ being 74.5% and the p-value suggests that `Departure_Delay_min` is a significant factor. The F-statistic is extremely large further confirming the model's overall significance.
+
+The second highest correlated factor is `Taxi_Out_min`.
+
+```{r}
+model2 <- lm(Arrival_Delay_min~(Departure_Delay_min*Taxi_Out_min)^2,data = ds_filtered)
+summary(model2)
+```
+$R^2$ being 80.3% with interaction terms and the p-value suggests that `Departure_Delay_min` and `Taxi_Out_min` are a significant factor. The F-statistic is extremely large further confirming the model's overall significance.
+
+Let's check the VIF of model2
+
+```{r}
+xkablevif(model2)
+```
+
+Vif = 1.03, Hence there's no multicollinearity.
+
+
+This suggests that the time elapsed between departure from the origin airport gate and wheels off is also a significant factor to the predict the flight delay.
+Extended Taxi-Out time often occurs due to congestion at the runway or delays in the sequencing of departures.
+Adverse weather (rainy/winters), Insufficient ground resources (as explored in the EDA).
+Taxi-Out delays peaks during holiday seasons/ winter months, de-icing procedures can extend the Taxi-Out Time, contributing to departure and arrival delays.
+
+
+```{r}
+model3 <- lm(Arrival_Delay_min~(Departure_Delay_min+Taxi_Out_min+Taxi_In_min)^2,data = ds_filtered)
+summary(model3)
+```
+There's a significant improvement in $R^2$ value (82.3%) and p-values suggest that the predictors are significant.
+Same as Taxi_Out delays, Taxi_In delays also peaks during holiday seasons and winter/rainy seasons.
+
+Let's check vif values.
+
+```{r}
+xkablevif(model3)
+```
+
+VIFs until 10 can be accepted.
+
+
+```{r}
+model4 <- lm(Arrival_Delay_min ~ (Departure_Delay_min + Taxi_Out_min + 
+    Taxi_In_min+Air_Time_min)^2, data = ds_filtered)
+summary(model4)
+```
+Not a significant impact on the $R^2$ values.
+Let's check VIF values.
+
+```{r}
+xkablevif(model4)
+```
+
+Multi collinearity kicks in when`Air_Time_min` is added.
+
+```{r}
+model5 <- lm(Arrival_Delay_min ~ (Departure_Delay_min + Taxi_Out_min + 
+    Taxi_In_min+Estimated_Elapsed_Time_min)^2, data = ds_filtered)
+summary(model5)
+```
+$R^2$ didn't improve significantly, but let's check vif
+```{r}
+xkablevif(model5)
+```
+
+VIF crossing 10. Hence, multi collinearity is present.
+
+Now, let's compare model1, model2, model3 using ANOVA tests.
+
+```{r}
+anova_model <- anova(model1,model2,model3)
+anova_model
+```
+Model Comparisons
+Model 1 vs. Model 2:
+
+Adding (Departure_Delay_min * Taxi_Out_min)^2 explains an additional 4,152,475 units of variance (Sum of Sq).
+The F-statistic is 24,285, with a p-value < 2e-16, indicating this improvement is highly significant.
+Model 2 vs. Model 3:
+
+Adding Taxi_In_min and its interactions explains an additional 1,451,645 units of variance (Sum of Sq).
+The F-statistic is 5,660, with a p-value < 2e-16, indicating this improvement is also highly significant.
+
+Each step in model complexity significantly improves the fit, as shown by the large F-statistics and extremely small p-values (< 0.001).]The additional variance explained decreases from Model 2 to Model 3 (4,152,475 vs. 1,451,645). This suggests that while adding more terms improves the model, the magnitude of improvement is smaller.
+
+
+Let's check MSE and RMSE for the model built using the features from the best model above:
+
+```{r}
+library(caTools)
+set.seed(123) #for reproducability
+split <- sample.split(ds_filtered$Arrival_Delay_min, SplitRatio = 0.8)
+train_data <- subset(ds_filtered, split == TRUE)
+test_data <- subset(ds_filtered, split == FALSE)
+model2_train <- lm(Arrival_Delay_min ~ (Departure_Delay_min*Taxi_Out_min)^2, data = train_data)
+model3_train <- lm(Arrival_Delay_min~(Departure_Delay_min+Taxi_Out_min+Taxi_In_min)^2, data = train_data)
+
+predictions_2_test <- predict(model2_train, newdata = test_data)
+predictions_3_test <- predict(model3_train, newdata = test_data)
+
+predictions_2_train <- predict(model2_train, newdata = train_data)
+predictions_2_train <- predict(model2_train, newdata = train_data)
+```
+
+```{r}
+# Function to calculate MSE
+calculate_mse <- function(actuals, predictions) {
+  mean((actuals - predictions)^2)
+}
+
+# Function to calculate RMSE
+calculate_rmse <- function(actuals, predictions) {
+  sqrt(calculate_mse(actuals, predictions))
+}
+
+# Calculate MSE and RMSE for model2 (Train and Test)
+mse_model2_train <- calculate_mse(train_data$Arrival_Delay_min, predictions_2_train)
+rmse_model2_train <- calculate_rmse(train_data$Arrival_Delay_min, predictions_2_train)
+
+mse_model2_test <- calculate_mse(test_data$Arrival_Delay_min, predictions_2_test)
+rmse_model2_test <- calculate_rmse(test_data$Arrival_Delay_min, predictions_2_test)
+
+# Calculate MSE and RMSE for model3 (Train and Test)
+predictions_3_train <- predict(model3_train, newdata = train_data)  # Predictions for training data
+
+mse_model3_train <- calculate_mse(train_data$Arrival_Delay_min, predictions_3_train)
+rmse_model3_train <- calculate_rmse(train_data$Arrival_Delay_min, predictions_3_train)
+
+mse_model3_test <- calculate_mse(test_data$Arrival_Delay_min, predictions_3_test)
+rmse_model3_test <- calculate_rmse(test_data$Arrival_Delay_min, predictions_3_test)
+
+# Print results
+cat("Model 2 - Training MSE:", mse_model2_train, "RMSE:", rmse_model2_train, "\n")
+cat("Model 2 - Testing MSE:", mse_model2_test, "RMSE:", rmse_model2_test, "\n\n")
+
+cat("Model 3 - Training MSE:", mse_model3_train, "RMSE:", rmse_model3_train, "\n")
+cat("Model 3 - Testing MSE:", mse_model3_test, "RMSE:", rmse_model3_test, "\n")
+
+```
+Both Model 2 and Model 3 demonstrate low MSE and RMSE values for both training and testing datasets, indicating they are well-fitted to the data and capable of making accurate predictions.
+The RMSE values are close to each other for the training and testing sets, showing no signs of overfitting or underfitting.
+
+The lower MSE and RMSE for Model 3 suggest it should be preferred for predicting Arrival_Delay_min.
+
+
+## SMART Q2
+“Which U.S. airports consistently experience the highest cumulative delays across different delay causes (Carrier, Weather, NAS, Security, Late Aircraft) for both origin and destination flights, and how does this ranking vary on a monthly or seasonal basis over the observed period?”
+
+```{r Filtering data, include=T}
+# Filtering Data
+flight_data <- flight_b %>%
+  filter(!is.na(Carrier_Delay_min) | !is.na(Weather_Delay_min) | 
+         !is.na( NAS_Delay_min) | !is.na(Security_Delay_min) | 
+         !is.na(Late_Aircraft_Delay_min))
+```
+
+
+```{r Formatting data, include=T}
+# Formatting Date and adding Month and Season column
+flight_data$Date <- as.Date(flight_data$Date, format = "%d-%m-%Y")
+flight_data_cleaned <- flight_data %>%
+  mutate(Month = month(Date, label = TRUE, abbr = TRUE),
+         Season = case_when(
+           Month %in% c("Dec", "Jan", "Feb") ~ "Winter",
+           Month %in% c("Mar", "Apr", "May") ~ "Spring",
+           Month %in% c("Jun", "Jul", "Aug") ~ "Summer",
+           Month %in% c("Sep", "Oct", "Nov") ~ "Fall"
+         ))
+```
+
+
+```{r Cleaning data, include=T}
+# Cleaning Dataframe
+flight_delays <- flight_data_cleaned %>%
+  filter(!is.na(Carrier_Delay_min) | !is.na(Weather_Delay_min) | 
+         !is.na( NAS_Delay_min) | !is.na(Security_Delay_min) | 
+         !is.na(Late_Aircraft_Delay_min)) %>%
+  select(Origin, Destination, Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, Month, Season)
+```
+
+
+```{r Checking NA values, include=T} 
+# Checking NA count
+na_count <- colSums(is.na(flight_delays))
+#print(na_count)
+```
+
+```{r Cleaned data, include=T}
+#head(flight_delays)
+```
+
+
+```{r Delay checks, include=T}
+### Checking all the rows if delay exists or not
+flight_delays$outcome <- ifelse(rowSums(flight_delays == 0) == ncol(flight_delays), 1, 0)
+no_delay_rows <- flight_delays[flight_delays$outcome == 1, ]
+#head(no_delay_rows)
+```
+
+### 4.4 - Frequency of top 10 Origin and Destination airports delay
+
+To identify the airports with the highest delay frequency, we aggregated the data by origin and destination airports and calculated the total count of delays for each. Using the ggplot2 library, a bar chart was created to visualize these counts, with separate bars for origin and destination delays.
+
+```{r Identifying frequency, include=T}
+origin_counts <- flight_delays %>%
+  group_by(Origin) %>%
+  summarise(Frequency = n()) %>%
+  arrange(desc(Frequency)) %>%
+  mutate(Type = "Origin")
+
+Destination_counts <- flight_delays %>%
+  group_by(Destination) %>%
+  summarise(Frequency = n()) %>%
+  arrange(desc(Frequency)) %>%
+  mutate(Type = "Destination")
+
+origin_counts <- rename(origin_counts, Airport = Origin)
+Destination_counts <- rename(Destination_counts, Airport = Destination)
+
+combined_counts <- bind_rows(origin_counts, Destination_counts)
+
+top_airports <- combined_counts %>%
+  group_by(Airport) %>%
+  summarise(TotalFrequency = sum(Frequency)) %>%
+  arrange(desc(TotalFrequency)) %>%
+  slice(1:10)
+
+final_counts <- combined_counts %>%
+  filter(Airport %in% top_airports$Airport)
+
+ggplot(final_counts, aes(x = reorder(Airport, Frequency), y = Frequency, fill = Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Top 10 Airports by Delay Frequency (Origin vs Destination)",
+       x = "Airport", y = "Delay Frequency") +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_manual(values = c("Origin" = "steelblue", "Destination" = "darkorange"))
+```
+Findings: 
+The bar chart illustrated that Chicago O'Hare International Airport (ORD), Dallas/Fort Worth International Airport (DFW), and Hartsfield-Jackson Atlanta International Airport (ATL) consistently had the highest delay frequencies. This visualization allows us to see which airports contribute most to delays, offering insight into which locations could benefit most from improvement initiatives. These airports serve as significant hubs, which likely increases the volume and frequency of delays due to their high operational demands.
+
+### 4.5 - Creating Heatmap to understand delay cause at top 10 airports
+
+To explore which specific delay causes are most prevalent at the top 10 airports, a heatmap was generated. We first isolated the delay causes for each airport and then aggregated them to calculate the total delay minutes per cause for each airport. The causes included Carrier delays, Weather delays, NAS (National Airspace System) delays, Security delays, and Late Aircraft delays.
+
+```{r Identifying delay causes, include=T}
+top_origin_airports <- flight_delays %>%
+  group_by(Origin) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Origin)
+
+top_Destination_airports <- flight_delays %>%
+  group_by(Destination) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Destination)
+
+top_airports <- unique(c(top_origin_airports, top_Destination_airports))
+
+filtered_delays <- flight_delays %>%
+  filter(Origin %in% top_airports | Destination %in% top_airports)
+
+heatmap_data <- filtered_delays %>%
+  select(Origin, Destination, Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min) %>%
+  pivot_longer(cols = c(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min),
+               names_to = "DelayType",
+               values_to = "TotalDelay") %>%
+  mutate(Airport = ifelse(Origin %in% top_airports, Origin, Destination)) %>%
+  filter(!is.na(TotalDelay))
+
+heatmap_summary <- heatmap_data %>%
+  group_by(Airport, DelayType) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(heatmap_summary, aes(x = Airport, y = DelayType, fill = TotalDelay)) +
+  geom_tile(color = "black") +
+  scale_fill_gradient(low = "white", high = "blue", na.value = "grey50") +
+  labs(title = "Heatmap of Delay Causes at Top 10 Airports",
+       x = "Airport",
+       y = "Delay Cause",
+       fill = "Total Delay Minutes") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+Findings: The heatmap highlighted Late Aircraft as the leading cause of delays across most airports, followed by NAS delays. This suggests that delays in arriving aircraft often lead to further delays in departing flights. Weather and Carrier delays were less frequent, and Security delays had minimal impact. The use of colour intensity in the heatmap provided a clear view of where each delay type is concentrated, making it easier to pinpoint which airports are heavily affected by specific delay causes.
+
+### 4.6 -  Identifying season in which delays occurs the most at top 10 airports
+
+Lastly, to understand seasonal patterns, a bar chart was created to display the cumulative delay minutes across different seasons (Winter, Spring, Summer, and Fall) for each of the top 10 airports. This analysis helps in determining if certain seasons contribute more to delays, which could be attributed to seasonal weather changes, travel demand fluctuations, or operational factors.
+
+```{r Identifying seasons, include=T}
+top_origin_airports <- flight_delays %>%
+  group_by(Origin) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Origin)
+
+top_Destination_airports <- flight_delays %>%
+  group_by(Destination) %>%
+  summarize(TotalDelay = sum(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Destination)
+
+top_airports <- unique(c(top_origin_airports, top_Destination_airports))
+
+filtered_delays <- flight_delays %>%
+  filter(Origin %in% top_airports | Destination %in% top_airports)
+
+print(colnames(filtered_delays))
+
+seasonal_delays <- filtered_delays %>%
+  select(Origin, Destination, Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min, Season) %>%
+
+  pivot_longer(cols = c(Carrier_Delay_min, Weather_Delay_min,  NAS_Delay_min, Security_Delay_min, Late_Aircraft_Delay_min),
+               names_to = "DelayType", values_to = "TotalDelay") %>%
+  mutate(Airport = ifelse(Origin %in% top_airports, Origin, Destination)) %>%
+  group_by(Airport, Season) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE), .groups = 'drop')
+
+ggplot(seasonal_delays, aes(x = Airport, y = TotalDelay, fill = Season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Seasonal Delays for Top 10 Airports",
+       x = "Airport", y = "Total Delay (Minutes)") +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set3")
+```
+Findings: The seasonal bar chart revealed that winter had the highest delay minutes, followed by spring. Winter delays are expected due to adverse weather conditions that impact flight operations. This seasonal analysis underscores the importance of season-specific delay mitigation strategies, such as deploying additional resources or preparing contingency plans during peak delay seasons.
+
+```{r}
+
+flight_b$Date <- as.Date(flight_b$Date)
+flight_b$Month <- month(flight_b$Date)
+```
+
+```{r}
+# Filter summer months (June-August)
+summer_data <- flight_b %>%filter(Month %in% c(6, 7, 8))
+```
+
+```{r}
+## Calculate average delays by carrier
+carrier_delays <- summer_data %>%
+  group_by(Unique_Carrier_Code) %>%
+  summarise(
+    AvgArrival_Delay_min = mean(Arrival_Delay_min, na.rm = TRUE),
+    AvgDeparture_Delay_min = mean(Departure_Delay_min, na.rm = TRUE),
+    TotalDelay = AvgArrival_Delay_min + AvgDeparture_Delay_min,
+    Carrier_Delay_min = mean(Carrier_Delay_min, na.rm = TRUE),
+    Weather_Delay_min = mean(Weather_Delay_min, na.rm = TRUE)
+  ) %>%
+  arrange(desc(TotalDelay))
+
+top_3_carriers <- head(carrier_delays, 3)
+```
+
+## SMART Q3
+“What are the top 3 carriers with the highest average delay times during peak summer months (June-August), and how do their delay patterns correlate with specific routes and time of day?”
+
+### 4.7 - Top 3 Carriers Average Delays
+
+The exploratory data analysis (EDA) represented by the bar chart focuses on
+understanding flight delay patterns for the top three U.S. carriers—United Airlines,American Airlines, SkyWest Airlines during peak summer travel months (June to August). The primary goal of this analysis is to identify three main questions and provide the reader an answer :-
+Identification of Top Delaying Airlines: Which three U.S. airlines experience the most average flight delays during the peak summer travel season?
+The routes facing the most delay: Listed 10 routes which face the most delay
+Time-of-Day Delay Patterns: How do the average delay times of these top three airlines differ across morning, afternoon, and evening flights?
+Answering the first sub- question of my SMART question it goes like:
+The motivation behind creating this specific plot stems from the well-known fact that summer months experience a surge in air traffic, often leading to increased delays due to factors like weather, congestion, and operational challenges. By analyzing the top carriers with the highest average delays we are also providing the average delay of each of the given carriers.
+Here the highest was shown by United Airlines (142.23 mins).
+
+```{r}
+
+ggplot(top_3_carriers, aes(x = reorder(Unique_Carrier_Code, -TotalDelay), y = TotalDelay)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = round(TotalDelay, 2)), vjust = -0.5) +
+  theme_minimal() +
+  labs(
+    title = "Top 3 Carriers with Highest Average Delays (Summer Months)",
+    x = "Carrier",
+    y = "Average Total Delay (minutes)"
+  )
+```
+### Time of Day Analysis
+```{r}
+
+summer_data$Hour <- as.numeric(format(strptime(sprintf("%04d", summer_data$Departure_Time),format = "%H%M"), "%H"))
+```
+### 4.8 - Delay Patterns by Time of Day
+
+The second sub-question wanted to uncover the follow:
+The top 10 routes that face the highest delay during the months of Summer (June-August). Where I wanted the readers to understand the delay pattern on different routes and what is the potential reason for such delay.
+
+Here we found the top 3 routes to be as follows:
+SFO (San Francisco)-> JFK (John. F Kennedy)
+RDU(Raleigh-Durham International Airport) -> LGA (LaGuardia Airport, NY)
+PVD (Rhode Island T.F. Green International Airport)-> BWI (Baltimore/Washington International
+
+This result was based on the fact that people were traveling cross country to meet friends, family and also on holidays. This means the higher traffic was traveling to different parts of the country and such analysis helps airlines to work on making these routes more efficient and providing higher quality services here.
+
+```{r}
+# Visualization 2: Delay Patterns by Time of Day
+hourly_delays <- summer_data %>%
+  filter(Unique_Carrier_Code %in% top_3_carriers$Unique_Carrier_Code) %>%
+  group_by(Unique_Carrier_Code, Hour) %>%
+  summarise(AvgDelay = mean(Arrival_Delay_min, na.rm = TRUE))
+
+ggplot(hourly_delays, aes(x = Hour, y = AvgDelay, color = Unique_Carrier_Code)) +
+  geom_line() +
+  geom_smooth(se = FALSE) +
+  theme_minimal() +
+  labs(
+    title = "Delay Patterns by Time of Day",
+    x = "Hour of Day",
+    y = "Average Arrival Delay (minutes)"
+  )
+```
+### Route Analysis
+```{r}
+ 
+route_delays <- summer_data %>%
+  group_by(Unique_Carrier_Code, Origin, Destination) %>%
+  summarise(
+    AvgDelay = mean(Arrival_Delay_min, na.rm = TRUE),
+    flight = n()
+  ) %>%
+  filter(flight >= 50) %>%  # Filter routes with minimum 50 flight
+  arrange(desc(AvgDelay))
+```
+
+
+### 4.9 - Top 10 Routes with Highest Delays
+
+The third sub-question tried to identify the delay pattern in the airlines based on the time of the day during the months of summer (June-August). 
+
+Here we try to the understand the delay by the airline during the different hour of the day based on the 24 - hour time window the findings from this plot aimed at providing the reader a more robust understanding of the delay patter by three airlines specifically:
+American Airlines, Skywest Airlines, United Airlines
+
+This showcased the following findings that American Airlines had the highest delay during early morning hours which averaged about more than 450 minutes followed by 400 minutes for United Airlines.
+
+This presented an understanding of why airlines face high delay during mornings which can be attributed to morning rush hours by tourists, overselling of morning tickets and also lower human efficiency hourly. 
+```{r}
+
+top_10_routes <- head(route_delays, 10)
+ggplot(top_10_routes, 
+       aes(x = paste(Origin, "->", Destination), y = AvgDelay, fill = Unique_Carrier_Code)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Top 10 Routes with Highest Average Delays",
+    x = "Route",
+    y = "Average Delay (minutes)"
+  )
+```
+
+```{r, include=T}
+# Correlation Analysis
+library(corrplot)
+
+correlation_vars <- summer_data %>%
+  select(Arrival_Delay_min, Departure_Delay_min, Distance_mi, Taxi_In_min, Taxi_Out_min)
+correlation_matrix <- cor(correlation_vars, use = "complete.obs")
+
+# Visualization 4: Correlation Heatmap
+corrplot(correlation_matrix, 
+         method = "color", 
+         type = "upper", 
+         addCoef.col = "black",
+         tl.col = "black",
+         tl.srt = 45)
+```
+
+```{r, include=T}
+# Statistical Summary
+summary_stats <- summer_data %>%
+  group_by(Unique_Carrier_Code) %>%
+  filter(Unique_Carrier_Code %in% top_3_carriers$Unique_Carrier_Code) %>%
+  summarise(
+    Mean_Delay = mean(Arrival_Delay_min, na.rm = TRUE),
+    Median_Delay = median(Arrival_Delay_min, na.rm = TRUE),
+    SD_Delay = sd(Arrival_Delay_min, na.rm = TRUE),
+    Total_flight = n(),
+    Delayed_flight = sum(Arrival_Delay_min > 0, na.rm = TRUE),
+    Delay_Rate = Delayed_flight / Total_flight * 100
+  )
+print(summary_stats)
+```
+```{r}
+write.csv(summary_stats, "airline_delay_analysis.csv")
+```
+
+## SMART Q4
+
+“What time of day do flights experience the highest frequency of delays? Are there specific hours when certain types of delays, such as (NAS, Security, or Late Aircraft) are more frequent?”
+
+```{r, include=T}
+# Data Preprocessing and Summary Statistics
+# Convert time fields to proper format
+flight_b$Departure_Time <- as.numeric(flight_b$Departure_Time)
+flight_b$hour <- floor(flight_b$Departure_Time/100)
+
+# Create binary delay indicator
+flight_b$is_delayed <- ifelse(flight_b$Departure_Delay_min > 15, 1, 0)
+
+# Basic summary statistics
+summary(flight_b)
+
+# Check for missing values
+colSums(is.na(flight_b))
+```
+
+
+
+```{r, include=T}
+# Descriptive Statistics
+hourly_stats <- flight_b %>%
+  group_by(hour) %>%
+  summarise(
+    total_flight = n(),
+    delayed_flight = sum(is_delayed, na.rm = TRUE),
+    delay_rate = delayed_flight/total_flight,
+    avg_delay = mean(Departure_Delay_min, na.rm = TRUE),
+    sd_delay = sd(Departure_Delay_min, na.rm = TRUE),
+    carrier_delay = mean(Carrier_Delay_min, na.rm = TRUE),
+    weather_delay = mean(Weather_Delay_min, na.rm = TRUE),
+    nas_delay = mean( NAS_Delay_min, na.rm = TRUE),
+    security_delay = mean(Security_Delay_min, na.rm = TRUE),
+    late_aircraft_delay = mean(Late_Aircraft_Delay_min, na.rm = TRUE)
+  )
+
+print(hourly_stats)
+```
+
+
+### 4.10 - Overall Delay pattern by hour
+
+The bar chart depicts the pattern of hourly flight delays, which provides insight into the peak and low-delay periods and trends throughout the day. Evidently, the delays are at their highest during late-night hours between 12:00 AM and 3:00 AM and late evening between 6:00 PM and 11:00 PM. Lastly, there is a significant decrease in delay rates around 5:00 AM, which provides evidence that early morning is a time of lowest delays, possibly due to lower flight volumes or smoother operational efficiency in those hours. This low-delay period identifies the optimal window for on-time departures, possibly due to fewer inbound flight dependencies and favorable early-morning weather patterns.
+
+The data shows that delay rates increase from about 6:00 AM and increase gradually throughout the day. The rate of delays rises in the afternoon and evening, peaking once more in late evening. This might indicate that compounding daily delays with increasing flight burden on airports, the weather effects, and possible network disruptions accumulate over time.
+
+In a nutshell, these results underline the advantages of early morning flight schedules in reducing delay risks. The pattern also shows there is operational stress during late-night and evening hours, which could guide airlines and airports in resource allocation and improvements in the management of flight schedules to maintain smooth operations.
+
+```{r, include=T}
+ggplot(hourly_stats, aes(x = factor(hour), y = delay_rate, fill = delay_rate)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgreen", high = "red") +
+  theme_minimal() +
+  labs(title = "Hourly Flight Delay Distribution",
+       x = "Hour of Day",
+       y = "Delay Rate (%)",
+       caption = "Delays > 15 minutes considered",
+       fill = "Delay %") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14),
+    axis.text.x = element_text(angle = 0),
+    legend.position = "right"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+```
+
+
+### 4.11 - Types of Delays by hour 
+
+This time series line graph helps analyze the trend of various delay types on an hourly basis and contributes toward identifying the main contributors to flight delays. The dataset classifies delay causes into five main types: Late Aircraft, Carrier, Weather, NAS (National Airspace System), and Security.
+
+Summary - The most common cause of delays was the Late Aircraft category, which always peaked in delays at some peak hours. Such a delay with Late Aircraft normally results from the previous flights arriving late and thus affecting subsequent departures in a domino effect. The second most common cause of delays was related to carrier delays, associated with operational problems with the airlines themselves, showing periodic problems arising from poor airline management and resource scheduling. Moderate delays occurred from NAS and weather sources, both of which are largely exogenous and outside the ability to control such impacts. While moderate, weather delays have periodic peaks during weather conditions or certain times of the year, and NAS delays tend to vary according to airspace activity.
+Security delays were the least in all instances, likely due to stable security protocols and fewer unpredictable factors, which may indicate that security seldom added to overall delay times.
+
+Insights for Operational Improvements - Identifying Late Aircraft as the top cause emphasizes the importance of smoothing out turnaround processes and scheduling flexibility, so minor delays can be absorbed without causing the next flights to be delayed. Carrier delays having a large effect indicates possible enhancements in operational management to decrease their rate of occurrence. Furthermore, a focused approach to deal with the problems related to weather, like better forecasting, could temper these effects, especially during peak travel times. This breakdown will provide a panoramic view of stakeholders meant to address and prioritize resources to specific causes of delay.
+```{r, include=T}
+delay_types <- hourly_stats %>%
+  select(hour, carrier_delay, weather_delay, nas_delay, 
+         security_delay, late_aircraft_delay) %>%
+  melt(id.vars = "hour")
+
+ggplot(delay_types, aes(x = hour, y = value, color = variable)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Average Delay Minutes by Type and Hour",
+       x = "Hour (24-hour format)",
+       y = "Average Delay (minutes)",
+       color = "Delay Type") +
+  scale_x_continuous(breaks = 0:23) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### 4.12 - Top 5 Airports Delay Analysis
+
+This analysis is on patterns of hour-by-hour delays for the five busiest airports in the U.S., pinpointing times of the day when delays are more common. The code first identifies the top five airports with the most flights from the `flight_b` data set, then proceeds to calculate the average delay rate (percentage of flights delayed) and the average delay time (minutes) for each hour of the day for each of those airports.
+
+The line chart below, from this analysis, visualizes the trends in how delay rates change by hour for each of these top airports, showing where peak delay times may be found and comparing trends across locations. Among the most compelling findings were that certain times of day—especially late afternoon and evening hours—tended to have higher delay rates, likely due to accumulated delays from earlier in the day or increased air traffic. Morning hours, on the other hand, typically have lower delay rates, probably due to fewer cumulative delays and a well-oiled operation.
+
+This will be useful to the airport management and the airlines for hedging specific times that require extra resources or changes in operations. Knowing these patterns for high-traffic airports begs the opportunity to develop strategies—targeted, effective, and efficient—to reduce delays during peak hours and improve the level of service for travelers. Further exploration could include more variables, such as meteorological conditions or seasonal fluctuations, to better understand the causes of delays at these airports.
+
+```{r, include=T}
+top_airports <- flight_b %>%
+  group_by(Origin) %>%
+  summarise(total_flight = n()) %>%
+  arrange(desc(total_flight)) %>%
+  head(5)
+
+airport_hourly <- flight_b %>%
+  filter(Origin %in% top_airports$Origin) %>%
+  group_by(Origin, hour) %>%
+  summarise(
+    delay_rate = mean(is_delayed, na.rm = TRUE),
+    avg_delay = mean(Departure_Delay_min, na.rm = TRUE)
+  )
+
+ggplot(airport_hourly, aes(x = hour, y = delay_rate, color = Origin)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Delay Rates by Hour for Top 5 Airports",
+       x = "Hour (24-hour format)",
+       y = "Delay Rate") +
+  scale_x_continuous(breaks = 0:23) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+# Conclusion
+
+By analyzing flight delay data through exploratory data analysis (EDA) techniques in R,
+we can uncover valuable insights into the causes and patterns of delays across U.S.
+airlines and airports. Identifying trends among the most delayed airlines helps allocate
+resources more effectively to reduce operational inefficiencies. Similarly, understanding
+how delay patterns vary across different times of day and seasons allows both airlines
+and airports to make informed decisions about scheduling and staffing. Ultimately, this
+analysis provides actionable insights that can help mitigate flight delays and improve
+overall passenger satisfaction while enhancing operational resilience within the aviation
+industry.
