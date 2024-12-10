@@ -1,0 +1,234 @@
+---
+title: "DATS6101_Intro_to_Data_Science Final Term Code"
+author: "Sayam Palrecha"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(tidyr)
+library(corrplot)
+library(scales)
+library(caret)
+
+```
+
+# Reading in the data
+
+```{r}
+airline_data1<-read.csv('Flight_Delay.csv')
+str(airline_data1)
+```
+```{r}
+head(airline_data1)
+```
+
+# Understanding the data and checking the na values in it 
+```{r}
+
+summary(airline_data1)
+```
+
+```{r}
+colSums(is.na(airline_data1))
+```
+
+```{r}
+colnames(airline_data1)
+```
+
+# Created data for summer months (June - July - August)
+```{r}
+airline_data1$Date <- as.Date(airline_data1$Date)
+airline_data1$Month <- month(airline_data1$Date)
+summer_data <- airline_data1 %>%filter(Month %in% c(6, 7, 8))
+```
+Created a subset using the main data named as summer_data.csv 
+Month column and binary_delay column which labels depdelay as 0 or 1 based on the delay values
+
+```{r}
+summer_data
+```
+```{r}
+write.csv(summer_data, "summer_data.csv", row.names = FALSE)
+```
+
+# Heatmap to understand the correlation of various numerical features with the target features
+Using Pearson correlation
+```{r}
+
+numeric_cols <- c("DepTime", "ArrTime", "CRSArrTime", "ActualElapsedTime",
+                 "CRSElapsedTime", "AirTime", "Distance", "TaxiIn", "TaxiOut", "ArrDelay")
+
+# Calculate correlation matrix
+correlation_matrix <- cor(summer_data[numeric_cols])
+
+# Create heatmap using corrplot
+corrplot(correlation_matrix,
+         method = "color",
+         type = "full",
+         tl.col = "black",
+         tl.srt = 45,
+         addCoef.col = "black",
+         number.cex = 0.7,
+         col = colorRampPalette(c("#4477AA", "#FFFFFF", "#CC0000"))(200),
+         title = "Correlation Heatmap of Flight Delay Features")
+
+```
+
+# Checking Multicollinearity of the Model by checking the VIF values 
+```{r}
+library(car)
+
+# relevant numerical columns
+
+predictor<-c( "DepDelay","TaxiIn", "TaxiOut", "CarrierDelay", 
+                "WeatherDelay", "NASDelay", "SecurityDelay", 
+                "LateAircraftDelay")
+
+vif_model<-lm(DepDelay ~ .,data=summer_data[predictor])
+
+vif_result<-vif(vif_model)
+
+print(vif_result)
+
+```
+
+```{r}
+plot(vif_model,which = 1, main = "Model Fit")
+```
+The data features show low vif values, which means that there is very low multicollinearity 
+
+
+
+```{r}
+barplot(vif_result,col = "skyblue", main = "Variance Inflation Factor (VIF)")
+```
+Visual understanding of the vif values for the features 
+
+# ANNOVA testing 
+To understand how by increasing the complexity of the models and how are the effects on the models
+```{r}
+
+#model 1 is a basic model
+model1 <- glm(delay_binary ~ DepDelay + Distance + TaxiOut,
+              data = train, 
+              family = "binomial")
+
+# Model 2: Adding weather and operational factors
+model2 <- glm(delay_binary ~ DepDelay + Distance + TaxiOut + 
+              WeatherDelay + NASDelay,
+              data = train, 
+              family = "binomial")
+
+# Model 3: Complex model with interactions
+model3 <- glm(delay_binary ~ DepDelay + Distance + TaxiOut + 
+              WeatherDelay + NASDelay + TaxiIn + 
+              DepDelay:Distance,
+              data = train, 
+              family = "binomial")
+
+```
+
+
+```{r}
+anova(model1, model2, model3, test = "Chisq")
+```
+# Understanding the ANNOVA results 
+Following the principle of parsimony:
+Model 1 is the simplest model
+Additional variables in Models 2 and 3 don't justify the increased complexity
+No statistically significant improvement in more complex models (Pr(>Chi) = 1)
+
+Model 1 has: Lower Residual Deviance (0.00044213)
+Simpler model with fewer parameters
+Adding complexity (Models 2 and 3) didn't improve performance significantly
+Evidence against more complex models:
+Model 2 shows increased residual deviance (0.00044903)
+Model 3's improvement is minimal (p-value = 1)
+
+
+
+# Model Building and Result Interpretation
+```{r}
+
+flight_data <- read.csv("summer_data.csv")
+
+
+features <- c("DepTime", "ArrTime", "CRSArrTime", "ActualElapsedTime", 
+             "CRSElapsedTime", "AirTime", "Distance", "TaxiIn", "TaxiOut")
+```
+
+# Create model dataset
+```{r}
+model_data <- flight_data[, c(features, "delay_binary")]
+```
+
+
+# Split the data into training and testing sets
+For quality data purporses we have kept the trin test spilt as 65%-35%
+```{r}
+set.seed(123)
+train_index <- createDataPartition(model_data$delay_binary, p = 0.65, list = FALSE)
+train_data <- model_data[train_index, ]
+test_data <- model_data[-train_index, ]
+```
+
+# Fit logistic regression model
+Used for binary output purporses 
+```{r}
+
+log_model <- glm(delay_binary ~ ., data = train_data, family = "binomial")
+```
+
+# Make predictions on test set
+To see the results 
+```{r}
+
+predictions <- predict(log_model, newdata = test_data, type = "response")
+pred_classes <- ifelse(predictions > 0.5, 1, 0)
+```
+
+# Calculate model performance metrics
+```{r}
+confusion_matrix <- confusionMatrix(factor(pred_classes), factor(test_data$delay_binary))
+roc_curve <- roc(test_data$delay_binary, predictions)
+```
+# Print results
+```{r}
+print(confusion_matrix)
+print(paste("AUC:", auc(roc_curve)))
+```
+# Plot ROC curve
+With AUC value of 0.78 or 78% 
+The model performs good and has room for better results
+```{r}
+plot(roc_curve, main = "ROC Curve for Flight Delay Prediction")
+
+```
+
+```{r}
+confusion_matrix1 <- confusionMatrix(factor(pred_classes),factor(test_data$delay_binary))
+```
+
+```{r}
+precision<-confusion_matrix$byClass["Pos Pred Value"]
+recall <- confusion_matrix$byClass["Sensitivity"]
+f1_score <- 2 * (precision * recall) / (precision + recall)
+print(precision)
+print(recall)
+print(f1_score)
+```
