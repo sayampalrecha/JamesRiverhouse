@@ -122,7 +122,7 @@ print(t_test_result)
 anova_result <- aov(DepDelay ~ TimeOfDay, data = filtered_data)
 summary(anova_result)
 ```
-### Turkey HSD test
+### Tukey HSD test
 ```{r Turkey HSD test, include=T}
 # Perform Tukey HSD test
 tukey_result <- TukeyHSD(anova_result)
