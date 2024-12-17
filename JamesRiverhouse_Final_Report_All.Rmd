@@ -644,3 +644,342 @@ Both Model 2 and Model 3 demonstrate low MSE and RMSE values for both training a
 The RMSE values are close to each other for the training and testing sets, showing no signs of overfitting or underfitting.
 
 The lower MSE and RMSE for Model 3 suggest it should be preferred for predicting Arrival_Delay_min.
+
+
+
+# 5. SMART Questions
+
+## SMART Q2
+"What are the significant factors influencing total flight delays across the top 10 busiest U.S. airports over the observed period, and how do these factors vary by season?"
+
+### 5.1 Question Specific Data Preprocessing
+```{r Filtering data, include=T}
+flight <- data.frame(read.csv("Flight_delay.csv"))
+
+flight_data <- flight %>%
+  filter(!is.na(CarrierDelay) | !is.na(WeatherDelay) | 
+         !is.na(NASDelay) | !is.na(SecurityDelay) | 
+         !is.na(LateAircraftDelay))
+```
+
+#### 5.1.1 Formatting Date and adding Month and Season column
+```{r Formatting data, include=T}
+flight_data$Date <- as.Date(flight_data$Date, format = "%d-%m-%Y")
+flight_data_cleaned <- flight_data %>%
+  mutate(Month = month(Date, label = TRUE, abbr = TRUE),
+         Season = case_when(
+           Month %in% c("Dec", "Jan", "Feb") ~ "Winter",
+           Month %in% c("Mar", "Apr", "May") ~ "Spring",
+           Month %in% c("Jun", "Jul", "Aug") ~ "Summer",
+           Month %in% c("Sep", "Oct", "Nov") ~ "Fall"
+         ))
+```
+
+#### 5.1.2 Cleaning Dataframe
+```{r Cleaning data, include=T}
+flight_delays <- flight_data_cleaned %>%
+  filter(!is.na(CarrierDelay) | !is.na(WeatherDelay) | 
+         !is.na(NASDelay) | !is.na(SecurityDelay) | 
+         !is.na(LateAircraftDelay)) %>%
+  select(Origin, Dest, CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay, Month, Season)
+```
+
+#### 5.1.3 Summary of cleaned data
+```{r Summary, include=T}
+knitr::kable(summary(flight_delays))
+```
+
+#### 5.1.4 Checking NA count
+```{r Checking NA values, include=T} 
+na_count <- colSums(is.na(flight_delays))
+print(na_count)
+```
+
+#### 5.1.5 Head of Cleaned data
+```{r Cleaned data, include=T}
+head(flight_delays)
+```
+
+#### 5.1.6 Checking all the rows if delay exists or not
+```{r Delay checks, include=T}
+flight_delays$outcome <- ifelse(rowSums(flight_delays == 0) == ncol(flight_delays), 1, 0)
+no_delay_rows <- flight_delays[flight_delays$outcome == 1, ]
+head(no_delay_rows)
+```
+
+### 5.2 Exploring the data (Question Specific)
+
+#### 5.2.1 Frequency of top 10 Origin and Destination airports delay
+```{r Identifying frequency, include=T}
+origin_counts <- flight_delays %>%
+  group_by(Origin) %>%
+  summarise(Frequency = n()) %>%
+  arrange(desc(Frequency)) %>%
+  mutate(Type = "Origin")
+
+dest_counts <- flight_delays %>%
+  group_by(Dest) %>%
+  summarise(Frequency = n()) %>%
+  arrange(desc(Frequency)) %>%
+  mutate(Type = "Destination")
+
+origin_counts <- rename(origin_counts, Airport = Origin)
+dest_counts <- rename(dest_counts, Airport = Dest)
+
+combined_counts <- bind_rows(origin_counts, dest_counts)
+
+top_airports <- combined_counts %>%
+  group_by(Airport) %>%
+  summarise(TotalFrequency = sum(Frequency)) %>%
+  arrange(desc(TotalFrequency)) %>%
+  slice(1:10)
+
+final_counts <- combined_counts %>%
+  filter(Airport %in% top_airports$Airport)
+
+ggplot(final_counts, aes(x = reorder(Airport, Frequency), y = Frequency, fill = Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Top 10 Airports by Delay Frequency (Origin vs Destination)",
+       x = "Airport", y = "Delay Frequency") +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_manual(values = c("Origin" = "steelblue", "Destination" = "darkorange"))
+```
+
+Findings Summary from above Graph:
+
+Top Delayed Airports:
+ORD (Chicago O'Hare International Airport) shows the highest delay frequency for both origin and destination flights. Delays originating from ORD are slightly more frequent than those arriving at ORD.
+DFW (Dallas/Fort Worth International Airport) ranks second, with delays at the destination level slightly higher than at the origin.
+ATL (Hartsfield-Jackson Atlanta International Airport) ranks third, with a significant number of origin delays compared to destination delays.
+
+#### 5.2.2 Creating Heatmap to understand delay cause at top 10 airports
+```{r Identifying delay causes, include=T}
+top_origin_airports <- flight_delays %>%
+  group_by(Origin) %>%
+  summarize(TotalDelay = sum(CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Origin)
+
+top_dest_airports <- flight_delays %>%
+  group_by(Dest) %>%
+  summarize(TotalDelay = sum(CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Dest)
+
+top_airports <- unique(c(top_origin_airports, top_dest_airports))
+
+filtered_delays <- flight_delays %>%
+  filter(Origin %in% top_airports | Dest %in% top_airports)
+
+heatmap_data <- filtered_delays %>%
+  select(Origin, Dest, CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay) %>%
+  pivot_longer(cols = c(CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay),
+               names_to = "DelayType",
+               values_to = "TotalDelay") %>%
+  mutate(Airport = ifelse(Origin %in% top_airports, Origin, Dest)) %>%
+  filter(!is.na(TotalDelay))
+
+heatmap_summary <- heatmap_data %>%
+  group_by(Airport, DelayType) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(heatmap_summary, aes(x = Airport, y = DelayType, fill = TotalDelay)) +
+  geom_tile(color = "black") +
+  scale_fill_gradient(low = "white", high = "blue", na.value = "grey50") +
+  labs(title = "Heatmap of Delay Causes at Top 10 Airports",
+       x = "Airport",
+       y = "Delay Cause",
+       fill = "Total Delay Minutes") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Findings Summary from above Graph:
+
+LateAircraftDelay and CarrierDelay are the two most dominant causes of delays, contributing the majority of delay minutes.
+WeatherDelay and SecurityDelay have minimal impacts compared to other causes.
+Efforts to reduce LateAircraftDelay and CarrierDelay should be prioritized to address the largest sources of delay.
+
+#### 5.2.3 Identifying season in which delays occurs the most at top 10 airports
+```{r Identifying seasons, include=T}
+top_origin_airports <- flight_delays %>%
+  group_by(Origin) %>%
+  summarize(TotalDelay = sum(CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Origin)
+
+top_dest_airports <- flight_delays %>%
+  group_by(Dest) %>%
+  summarize(TotalDelay = sum(CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay, na.rm = TRUE)) %>%
+  arrange(desc(TotalDelay)) %>%
+  slice_head(n = 10) %>%
+  pull(Dest)
+
+top_airports <- unique(c(top_origin_airports, top_dest_airports))
+
+filtered_delays <- flight_delays %>%
+  filter(Origin %in% top_airports | Dest %in% top_airports)
+
+print(colnames(filtered_delays))
+
+seasonal_delays <- filtered_delays %>%
+  select(Origin, Dest, CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay, Season) %>%
+
+  pivot_longer(cols = c(CarrierDelay, WeatherDelay, NASDelay, SecurityDelay, LateAircraftDelay),
+               names_to = "DelayType", values_to = "TotalDelay") %>%
+  mutate(Airport = ifelse(Origin %in% top_airports, Origin, Dest)) %>%
+  group_by(Airport, Season) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE), .groups = 'drop')
+
+ggplot(seasonal_delays, aes(x = Airport, y = TotalDelay, fill = Season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Seasonal Delays for Top 10 Airports",
+       x = "Airport", y = "Total Delay (Minutes)") +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set3")
+```
+
+Findings Summary from above Graph:
+
+The seasonal bar chart revealed that winter had the highest delay minutes, followed by spring. Winter delays are expected due to adverse weather conditions that impact flight operations. This seasonal analysis underscores the importance of season-specific delay mitigation strategies, such as deploying additional resources or preparing contingency plans during peak delay seasons.
+
+### 5.3 Statistical Tests
+
+#### 5.3.1 Two-Sample T-Test: Comparing Delays Between Two Airports
+```{r T-test, include=T}
+airport_data <- flight_delays %>% filter(Origin %in% c("ORD", "DFW"))
+
+t_test_result <- t.test(
+  LateAircraftDelay ~ Origin,
+  data = airport_data,
+  alternative = "two.sided")
+
+print(t_test_result)
+```
+
+Implications:
+
+This finding suggests that ORD experiences longer delays for Late Aircraft compared to DFW. Factors such as higher traffic volume, weather conditions, or airport congestion at ORD might contribute to this difference.
+
+#### 5.3.2 ANOVA: Comparing Mean Delays Across Seasons
+```{r Anova-test, include=T}
+anova_result <- aov(CarrierDelay ~ Season, data = flight_delays)
+summary(anova_result)
+```
+
+Conclusion:
+
+The p-value < 0.05 indicates strong statistical evidence to reject the null hypothesis.
+This result confirms that there are significant differences in the mean Carrier Delays among the seasons.
+
+Implications:
+
+The significant differences suggest that the season plays an important role in influencing Carrier Delays. Further analysis (e.g., post-hoc tests) can help identify which specific seasons contribute to these differences.
+
+#### 5.3.3 Tukey HSD test for identifying which pairs of seasons differ significantly
+```{r Tukey-test, include=T}
+tukey_result <- TukeyHSD(anova_result)
+
+print(tukey_result)
+```
+
+Implications:
+
+The significant pairwise comparisons highlight that Summer consistently has lower Carrier Delays compared to both Spring and Winter, while no significant difference exists between Winter and Spring.
+
+Now further lets make a Linear Model:
+
+### 5.4 Linear Regression Model to Analyze Total Flight Delays Across Airports and Seasons
+```{r LM, include=T}
+flight_data_cleaned <- seasonal_delays %>%
+  group_by(Airport, Season) %>%
+  summarize(TotalDelay = sum(TotalDelay, na.rm = TRUE), .groups = 'drop')
+
+flight_data_cleaned$Season <- factor(flight_data_cleaned$Season, levels = c("Winter", "Spring", "Summer", "Fall"))
+
+model <- lm(TotalDelay ~ Airport + Season, data = flight_data_cleaned)
+
+xkabledply(model, title = paste("Model :", format(formula(model)) ) )
+summary(model)
+```
+
+Key Findings:
+
+ORD (O'Hare) shows a significant positive impact on delays, with the highest coefficient estimate (962,795).
+Season Summer significantly reduces total delays (p < 0.001) compared to the reference level (Winter).
+Spring does not show a statistically significant impact on total delays.
+
+Conclusion:
+
+The linear regression model demonstrates that delays vary significantly by airport and season, with some airports contributing more to delays and Summer generally associated with fewer delays compared to Winter. The model explains 89.1% of the variability in total delays.
+
+```{r}
+predictions <- predict(model, newdata = flight_data_cleaned)
+
+predictions
+```
+
+### 5.5 Visualizing Predictions versus Actual values
+```{r Predictions, include=T}
+plot(flight_data_cleaned$TotalDelay, type = "p", col = "blue", pch = 16, cex = 1.2,
+     xlab = "Observation Index", ylab = "TotalDelay",
+     main = "Comparison of Actual and Predicted Total Delays")
+
+points(predictions, col = "red", pch = 17, cex = 1.2)
+
+legend("topright", legend = c("Actual", "Predicted"),
+       col = c("blue", "red"), pch = c(16, 17), cex = 0.8)
+```
+
+Key Findings:
+
+The comparison of actual versus predicted total flight delays is visualized in the graph, where:
+
+Actual values are shown in blue circles, representing the observed total delays for each airport and season combination.
+Predicted values are shown in red triangles, representing the delays predicted by the linear regression model.
+From the plot, it is evident that the predicted values closely follow the pattern of the actual values.
+
+In conclusion, the model appears to be robust and reliable for predicting flight delays.
+
+```{r}
+par(mfrow = c(2, 2))
+plot(model)
+```
+### 5.6 Model Evaluation
+```{r}
+mse <- mean(model$residuals^2)
+print(mse)
+
+rmse <- sqrt(mse)
+print(rmse)
+```
+
+Implications: 
+
+These values indicate that the model has a reasonable level of accuracy in predicting flight delays. Although there is some error, the predictions align well with the actual values, and the model's performance is acceptable based on the calculated metrics.
+
+Final Conclusion:
+
+1. Key Factors Influencing Flight Delays:
+Late Aircraft Delays, NAS Delays, and Carrier Delays are the primary contributors to total flight delays. Weather-related delays occur less frequently, while Security Delays are rare.
+Airports such as O'Hare International (ORD), Dallas/Fort Worth International (DFW), and Hartsfield-Jackson Atlanta International (ATL) consistently experience the highest cumulative delays due to these factors.
+
+2. Seasonal Variations:
+The Winter season experiences higher delays compared to other seasons, with Summer seeing fewer delays, as confirmed by the ANOVA test and the Tukey HSD test.
+
+3. Airport-Specific Findings:
+O'Hare International (ORD) and Dallas/Fort Worth International (DFW) are outliers with consistently higher delays, as shown by the T-test results.
+On the other hand, airports like JFK and LGA experience lower delays, making them more efficient in terms of total delays compared to others.
+
+4. Linear Regression Model Insights:
+Airports like JFK and LGA experience significantly lower delays compared to the baseline, while ORD experiences higher delays.
+Season is a significant predictor of delays, with Summer having fewer delays than Winter. The model's Multiple R-squared value of 0.891 indicates a strong fit, suggesting that these factors together explain a significant portion of the variation in total delays.
+
+5. Model Performance:
+The Mean Squared Error (MSE) of 3.58e+10 and Root Mean Squared Error (RMSE) of 189,221 indicate a reasonable fit, with the model performing adequately in predicting total flight delays across airports and seasons.
