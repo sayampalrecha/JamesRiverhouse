@@ -181,7 +181,7 @@ None of the delay types follow a normal distribution.
 Since these distributions are not normal, Parametric statistical studies cannot be performed. 
 
 
-# 4. SMART Questions & EDA 
+# 4. SMART Questions
 
 ## SMART Q1
 "Can we predict the total arrival delay using ML modeling for the top 5 most delayed airlines, using key factors that holds impact on the delay. This helps identify the significant predictors of delays and provides actionable insights for resource allocation and operational planning in future from the data collected from January 2019 to June 2019, catering better customer satisfaction."
@@ -382,9 +382,8 @@ Consistency of analysis over 6 month period:
 ### 4.4. Modelling:
 
 
-Data preparation for modelling.
+#### 4.4.1. Data preparation for modelling.
 
-let's check correlation:
 
 ```{r}
 ds <- subset(flight_5,select = -c(Carrier_Delay_min,Origin_Airport,Destination_Airport,CancellationCode,MonthYear,Carrier_name,Weather_Delay_min,NAS_Delay_min,Security_Delay_min,Late_Aircraft_Delay_min))
@@ -420,6 +419,9 @@ ds$Destination <- as.factor(ds$Destination)
 ds <- subset(ds,select = -c(Flight_Number,Tail_Number))
 ```
 
+#### 4.4.2. Features Exploration
+
+Checking the features using forward selection method.
 
 ```{r}
 loadPkg("leaps")
@@ -432,7 +434,7 @@ best_model_index <- which.max(reg_summary$adjr2)  # Index of highest Adjusted RÂ
 best_model_features <- reg_summary$which[best_model_index, ]  # Logical vector of selected features
 selected_features <- names(best_model_features[best_model_features == TRUE])[-1]
 cat("Features with the best Adjusted RÂ²:\n")
-print(selected_features)
+cat(selected_features)
 ds_filtered <- ds[, c("Arrival_Delay_min", selected_features)]
 ```
 Since the features with best Adjusted $R^2$ are `Estimated_Elapsed_Time_min`, `Air_Time_min`, `Departure_Delay_min` , `Taxi_In_min` and `Taxi_Out_min`. Let's re-check Adjusted $R^2$ graph with just these metrics.
@@ -442,6 +444,9 @@ loadPkg("leaps")
 reg.forward10 <- regsubsets(Arrival_Delay_min~., data = ds_filtered, nvmax = 10, nbest = 2, method = "forward")
 plot(reg.forward10, scale = "adjr2", main = "Adjusted R^2")
 ```
+
+Let's build a model with these features.
+
 ```{r}
 model <- lm(Arrival_Delay_min ~ Estimated_Elapsed_Time_min+Air_Time_min+Departure_Delay_min+Taxi_In_min+Taxi_Out_min, data = ds)
 summary(model)
@@ -458,6 +463,8 @@ xkablevif(model)
 As expected, high multi - collinearity.
 
 Hence, Let's build multiple models using the above variables.
+
+First, let's check correlation of these variables with `Arrival_Delay_min`
 
 ```{r, fig.height=6, fig.width=15}
 correlation_matrix <- cor(select_if(ds_filtered,is.numeric))
@@ -478,6 +485,9 @@ corrplot(correlation_matrix,
 
 `Departure_Delay_min` has high correlation with `Arrival_Delay_min`, which also makes sense because delay in departure also leads to flight reaching the destination late.
 
+#### 4.4.3. Modelling
+Model 1: 
+
 ```{r}
 model1 <- lm(Arrival_Delay_min~Departure_Delay_min,data = ds_filtered)
 summary(model1)
@@ -485,6 +495,8 @@ summary(model1)
 $R^2$ being 74.5% and the p-value suggests that `Departure_Delay_min` is a significant factor. The F-statistic is extremely large further confirming the model's overall significance.
 
 The second highest correlated factor is `Taxi_Out_min`.
+
+Model 2:
 
 ```{r}
 model2 <- lm(Arrival_Delay_min~(Departure_Delay_min*Taxi_Out_min)^2,data = ds_filtered)
@@ -506,6 +518,7 @@ Extended Taxi-Out time often occurs due to congestion at the runway or delays in
 Adverse weather (rainy/winters), Insufficient ground resources (as explored in the EDA).
 Taxi-Out delays peaks during holiday seasons/ winter months, de-icing procedures can extend the Taxi-Out Time, contributing to departure and arrival delays.
 
+Model 3:
 
 ```{r}
 model3 <- lm(Arrival_Delay_min~(Departure_Delay_min+Taxi_Out_min+Taxi_In_min)^2,data = ds_filtered)
@@ -523,6 +536,8 @@ xkablevif(model3)
 VIFs until 10 can be accepted.
 
 
+Model 4:
+
 ```{r}
 model4 <- lm(Arrival_Delay_min ~ (Departure_Delay_min + Taxi_Out_min + 
     Taxi_In_min+Air_Time_min)^2, data = ds_filtered)
@@ -537,6 +552,8 @@ xkablevif(model4)
 
 Multi collinearity kicks in when`Air_Time_min` is added.
 
+Model 5:
+
 ```{r}
 model5 <- lm(Arrival_Delay_min ~ (Departure_Delay_min + Taxi_Out_min + 
     Taxi_In_min+Estimated_Elapsed_Time_min)^2, data = ds_filtered)
@@ -548,6 +565,8 @@ xkablevif(model5)
 ```
 
 VIF crossing 10. Hence, multi collinearity is present.
+
+#### 4.4.3. Model Assesment:
 
 Now, let's compare model1, model2, model3 using ANOVA tests.
 
